@@ -1,0 +1,21 @@
+<launch>
+
+  <node name="rover_cam_detect0" pkg="rover_cam_detect" type="rover_cam_detect" respawn="false" output="screen">
+   <remap from="image" to="/image_raw0"/>
+   <remap from="detects" to="/detects0"/>
+  </node>
+  <node name="rover_cam_detect1" pkg="rover_cam_detect" type="rover_cam_detect" respawn="false" output="screen">
+    <remap from="detects" to="/detects1"/>
+   <remap from="image" to="/image_raw1"/>
+  </node>
+  <node name="rover_cam_detect2" pkg="rover_cam_detect" type="rover_cam_detect" respawn="false" output="screen">
+    <remap from="detects" to="/detects2"/>
+   <remap from="image" to="/image_raw2"/>
+  </node>
+  <node name="rover_cam_detect3" pkg="rover_cam_detect" type="rover_cam_detect" respawn="false" output="screen">
+    <remap from="detects" to="/detects3"/>
+   <remap from="image" to="/image_raw3"/>
+  </node>
+
+</launch>
+
