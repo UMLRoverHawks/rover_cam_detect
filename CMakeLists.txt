@@ -28,4 +28,5 @@ rosbuild_genmsg()
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 
 rosbuild_add_executable(rover_cam_detect src/image_convert.cpp)
+target_link_libraries(rover_cam_detect yaml-cpp)
 #target_link_libraries(example ${PROJECT_NAME})

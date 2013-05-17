@@ -7,6 +7,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/core/core.hpp>
+#include <yaml-cpp/yaml.h>
+#include <fstream>
 
 // rock detection messages
 #include <rover_cam_detect/imgData.h>
@@ -39,7 +41,12 @@ class ImageConverter
   // saturation masks
   cv::Mat satMask;
   cv::Mat highSatMask;
-  
+
+  // calibration things
+  std::vector<cv::Scalar> mins; // these vecs each follow the same ordering
+  std::vector<cv::Scalar> maxs;
+  std::vector<cv::Scalar> rgbAvgs;
+ 
 public:
   ImageConverter()
     : it_(nh_)
@@ -48,12 +55,69 @@ public:
     image_sub_ = it_.subscribe("image", 1, &ImageConverter::imageCb, this);
     //image_sub_ = it_.subscribe("image_raw", 1, &ImageConverter::imageCb, this);
     detect_pub_ = nh_.advertise<rover_cam_detect::imgDataArray>( "detects", 1000 ) ;
+
+    // getCalibrations() will load up a vector of scalars of min hsv values,
+    // 'mins', a vector of scalars of max hsv values, 'max,' 
+    // and a vector of scalars of rgb values, 'rgbAvgs,' 
+    // representing the avg rgb value of each min-max pair.
+    getCalibrations();
  
   }
 
   ~ImageConverter()
   {
     cv::destroyWindow(WINDOW);
+  }
+
+  void getCalibrations()
+  { 
+    // yaml parsing begins
+    std::ifstream fin("/home/csrobot/Downloads/sunny.yml", std::ifstream::in);
+    YAML::Parser parser(fin);
+    YAML::Node calibrationOutput;
+    parser.GetNextDocument(calibrationOutput);
+
+    getHsvMinsAndMaxesFromYaml(calibrationOutput);
+
+    calcRgbAveragesForBoxColors();
+  } 
+
+  void getHsvMinsAndMaxesFromYaml(const YAML::Node& cal)
+  {
+    for (unsigned i = 0; i < cal["colors"].size(); ++i)
+    { // for each color
+      int h, s, v;
+      cal["colors"][i]["mins"]["h"] >> h;
+      cal["colors"][i]["mins"]["s"] >> s;
+      cal["colors"][i]["mins"]["v"] >> v;
+      mins.push_back(cv::Scalar(h, s, v));
+
+      cal["colors"][i]["maxs"]["h"] >> h;
+      cal["colors"][i]["maxs"]["s"] >> s;
+      cal["colors"][i]["maxs"]["v"] >> v;
+      maxs.push_back(cv::Scalar(h, s, v));
+    }
+  }
+
+  void calcRgbAveragesForBoxColors()
+  {
+    for (unsigned i = 0; i < mins.size(); ++i)
+    {
+      cv::Mat min(1, 1, CV_8UC3, mins.at(i));
+      cvtColor(min, min, CV_HSV2RGB);
+      cv::Mat max(1, 1, CV_8UC3, maxs.at(i));
+      cvtColor(max, max, CV_HSV2RGB);
+      cv::Mat avg = min + max / 2;
+      // std::cout << (int)avg.at<cv::Vec3b>(0,0)[0] << ", " <<
+      //              (int)avg.at<cv::Vec3b>(0,0)[1] << ", " <<
+      //              (int)avg.at<cv::Vec3b>(0,0)[2] << std::endl;
+
+      // casting chars being used as ints to ints
+      rgbAvgs.push_back(cv::Scalar((int)avg.at<cv::Vec3b>(0,0)[0],
+                                   (int)avg.at<cv::Vec3b>(0,0)[1],
+                                   (int)avg.at<cv::Vec3b>(0,0)[2]));
+    }
+    std::cout << std::endl;
   }
 
   void imageCb(const sensor_msgs::ImageConstPtr& msg)
@@ -68,6 +132,7 @@ public:
       ROS_ERROR("cv_bridge exception: %s", e.what());
       return;
     }
+
 
     // do image processing here
     // OpenCV Mat image is cv_ptr->image
@@ -115,6 +180,11 @@ public:
     //std::vector<cv::Mat> hsv;
     //split(pyrImg, hsv);
     // -----------------------------------------------------------
+
+    
+
+
+
 
     // threshold based upon hue channel
     ///////////////////////cv::Mat coldMask;
@@ -286,6 +356,7 @@ public:
     rgbImg &= rgbMask;
 
     // resize image to original scale
+
     pyrUp(rgbImg, rgbImg);
 
     //cv::imshow("mask", mask);
@@ -301,7 +372,6 @@ public:
     ////image_pub_.publish(cv_ptr->toImageMsg());
     // publish detections
     detect_pub_.publish(rocksMsg) ;
-
   }
 
 
