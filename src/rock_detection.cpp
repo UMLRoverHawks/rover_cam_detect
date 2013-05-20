@@ -4,6 +4,7 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
+#include <std_msgs/ColorRGBA.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/core/core.hpp>
@@ -41,7 +42,7 @@ class RockDetection
   // calibration things
   std::vector<cv::Scalar> mins; // these vecs each follow the same ordering
   std::vector<cv::Scalar> maxs;
-  std::vector<cv::Scalar> rgbAvgs;
+  std::vector<std_msgs::ColorRGBA> rgbaAvgs;
  
 public:
   RockDetection()
@@ -54,9 +55,9 @@ public:
 
     // getCalibrations() will load up a vector of scalars of min hsv values,
     // 'mins', a vector of scalars of max hsv values, 'max,' 
-    // and a vector of scalars of rgb values, 'rgbAvgs,' 
-    // representing the avg rgb value of each min-max pair.
-   // getCalibrations(); // TODO: problem with file load?
+    // and a vector of scalars of rgba values, 'rgbaAvgs,' 
+    // representing the avg rgb value of each min-max pair
+    getCalibrations(); // TODO: problem with file load?
  
   }
 
@@ -69,7 +70,14 @@ public:
   { 
     // yaml parsing begins
     //std::ifstream fin("../sunny.yml", std::ifstream::in);
-    std::ifstream fin("/cloudy.yml", std::ifstream::in);
+    std::string calibrationPath = "/home/csrobot/.calibrations/cloudy.yml";
+    std::ifstream fin(calibrationPath.c_str(), std::ifstream::in);
+    if (!fin)
+    {
+      ROS_ERROR("There is no camera calibration file at: %s\n", 
+                calibrationPath.c_str());
+      exit(1);
+    }
     YAML::Parser parser(fin);
     YAML::Node calibrationOutput;
     parser.GetNextDocument(calibrationOutput);
@@ -105,16 +113,24 @@ public:
       cv::Mat max(1, 1, CV_8UC3, maxs.at(i));
       cvtColor(max, max, CV_HSV2RGB);
       cv::Mat avg = min + max / 2;
-      // std::cout << (int)avg.at<cv::Vec3b>(0,0)[0] << ", " <<
-      //              (int)avg.at<cv::Vec3b>(0,0)[1] << ", " <<
-      //              (int)avg.at<cv::Vec3b>(0,0)[2] << std::endl;
 
-      // casting chars being used as ints to ints
-      rgbAvgs.push_back(cv::Scalar((int)avg.at<cv::Vec3b>(0,0)[0],
-                                   (int)avg.at<cv::Vec3b>(0,0)[1],
-                                   (int)avg.at<cv::Vec3b>(0,0)[2]));
+      std_msgs::ColorRGBA rgbaAvg;
+      rgbaAvg.r = (float)avg.at<cv::Vec3b>(0,0)[0];
+      rgbaAvg.g = (float)avg.at<cv::Vec3b>(0,0)[1];
+      rgbaAvg.b = (float)avg.at<cv::Vec3b>(0,0)[2];
+      rgbaAvg.a = 1.0; 
+
+      rgbaAvgs.push_back(rgbaAvg);
     }
-    std::cout << std::endl;
+
+   // print statement to make sure rgba values are sane
+   //
+   // std::vector<std_msgs::ColorRGBA>::iterator it;
+   // for (it = rgbaAvgs.begin(); it != rgbaAvgs.end(); ++it)
+   // {
+   //   std::cout << it->r << ", " << it->g << ", " <<
+   //                it->b << ", " << it->a << std::endl;
+   // }
   }
 
   void imageCb(const sensor_msgs::ImageConstPtr& msg)
