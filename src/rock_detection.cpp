@@ -47,7 +47,7 @@ public:
   RockDetection()
     : it_(nh_)
   {
-    //image_pub_ = it_.advertise("image_detect", 1);
+    image_pub_ = it_.advertise("image_detect", 1);
     image_sub_ = it_.subscribe("image", 1, &RockDetection::imageCb, this);
     //image_sub_ = it_.subscribe("image_raw", 1, &RockDetection::imageCb, this);
     detect_pub_ = nh_.advertise<rock_publisher::imgDataArray>( "detects", 1000 ) ;
@@ -259,8 +259,8 @@ public:
 		//if( hToW > 0.20 || wToH > 0.20 )
 		if( compactness < MAX_COMPACT_NUM )
          	{
-			printf("contour %d: mn = %f stdev = %f\n",i, mn.val[0], stdev.val[0]);
-			printf("contour %d: a = %f l = %f [compact = %f]\n", i, area, length, compactness);
+			//printf("contour %d: mn = %f stdev = %f\n",i, mn.val[0], stdev.val[0]);
+			//printf("contour %d: a = %f l = %f [compact = %f]\n", i, area, length, compactness);
 			cv::rectangle(cv_ptr->image, 2*rect.tl(), 2*rect.br(),  cv::Scalar(0,255,0), 2);
 			//cv::drawContours(cv_ptr->image, coldContours, i, cv::Scalar(0,0,255), 2); 
 
@@ -303,11 +303,12 @@ public:
     //cv::imshow("sat", satMask);
     //cv::imshow("value", hsv[2]);
     //cv::imshow(WINDOW, hsvImg);
-    cv::imshow("detections!", cv_ptr->image);
-    cv::waitKey(3);
+    //cv::imshow("detections!", cv_ptr->image);
+    //cv::waitKey(3);
 
     // publish images    
-    ////image_pub_.publish(cv_ptr->toImageMsg());
+    image_pub_.publish(cv_ptr->toImageMsg());
+
     // publish detections
     if(!rocksMsg.rockData.empty())
     {
