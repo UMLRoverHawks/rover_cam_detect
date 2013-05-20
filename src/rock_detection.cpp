@@ -271,11 +271,9 @@ public:
 			rockData.height =  rect.height ;
 			//rockData.color = "rainbow" ;
 			rocksMsg.rockData.push_back(rockData) ;
-
 			// -------------------------------------------------------------------
          	}
 	 }
-
     }
 
     // only for visualization	    
@@ -311,7 +309,11 @@ public:
     // publish images    
     ////image_pub_.publish(cv_ptr->toImageMsg());
     // publish detections
-    detect_pub_.publish(rocksMsg) ;
+    if(!rocksMsg.rockData.empty())
+    {
+       detect_pub_.publish(rocksMsg) ;
+    }
+
   }
 
 
