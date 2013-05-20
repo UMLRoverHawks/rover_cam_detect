@@ -26,10 +26,6 @@ class RockDetection
   image_transport::Publisher image_pub_;
   ros::Publisher detect_pub_;
 
-  // Detection data structures for publishing
-  rock_publisher::imgData rockData ;
-  rock_publisher::imgDataArray rocksMsg ;
-
   // Reusable images
   // convert to HSV
   cv::Mat hsvImg;
@@ -60,7 +56,7 @@ public:
     // 'mins', a vector of scalars of max hsv values, 'max,' 
     // and a vector of scalars of rgb values, 'rgbAvgs,' 
     // representing the avg rgb value of each min-max pair.
-    ///getCalibrations(); // TODO: problem with file load?
+   // getCalibrations(); // TODO: problem with file load?
  
   }
 
@@ -73,7 +69,7 @@ public:
   { 
     // yaml parsing begins
     //std::ifstream fin("../sunny.yml", std::ifstream::in);
-    std::ifstream fin("./cloudy.yml", std::ifstream::in);
+    std::ifstream fin("/cloudy.yml", std::ifstream::in);
     YAML::Parser parser(fin);
     YAML::Node calibrationOutput;
     parser.GetNextDocument(calibrationOutput);
@@ -226,18 +222,18 @@ public:
     // number of mask types (warm, cold)
     int numMaskTypes = 1; 
     
-    for(int j=0; j<numMaskTypes; ++j)
-    { 
-	//std::vector<std::vector<cv::Point> > contours = coldContours;
-	int numContours = 0;
+    int numContours = 0;
 
-	//printf("%d coldContours\n", coldContours.size() );
-	//printf("%d warmContours\n", warmContours.size());
+    //printf("%d coldContours\n", coldContours.size() );
+    //printf("%d warmContours\n", warmContours.size());
 	
-	coldContours.insert( coldContours.end(), warmContours.begin(), warmContours.end() );
-	numContours = coldContours.size();
+    coldContours.insert( coldContours.end(), warmContours.begin(), warmContours.end() );
+    numContours = coldContours.size();
 
-    if(j == 0) {		
+    // Detection data structures for publishing
+    rock_publisher::imgData rockData ;
+    rock_publisher::imgDataArray rocksMsg ;
+
     for(int i; i< numContours; ++i)
     {
 	 // a contour is an array points
@@ -273,7 +269,7 @@ public:
 			rockData.y =  rect.y ;
 			rockData.width = rect.width ;
 			rockData.height =  rect.height ;
-			rockData.color = "rainbow" ;
+			//rockData.color = "rainbow" ;
 			rocksMsg.rockData.push_back(rockData) ;
 
 			// -------------------------------------------------------------------
@@ -281,13 +277,6 @@ public:
 	 }
 
     }
-
-    } // cold contours
-
-
-
-    } 	
-
 
     // only for visualization	    
     // merge results
