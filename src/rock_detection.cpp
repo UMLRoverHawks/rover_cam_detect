@@ -44,6 +44,12 @@ class RockDetection
   std::vector<cv::Scalar> maxs;
   std::vector<std_msgs::ColorRGBA> rgbaAvgs;
  
+  int MAX_ROCK_SIZE;
+  int MIN_ROCK_SIZE;
+  double MAX_COMPACT_NUM; // MAX_COMPACT_NUM = 1, for a perfect circle
+  std::string PATH_TO_CALIBRATIONS;
+  std::string CALIBRATION_FILE;
+
 public:
   RockDetection()
     : it_(nh_)
@@ -53,11 +59,28 @@ public:
     //image_sub_ = it_.subscribe("image_raw", 1, &RockDetection::imageCb, this);
     detect_pub_ = nh_.advertise<rock_publisher::imgDataArray>( "detects", 1000 ) ;
 
+    if (nh_.hasParam("detections/maxRockSize") && // default = 1300
+        nh_.hasParam("detections/minRockSize") && // default = 100
+        nh_.hasParam("detections/maxCompactNum") && // default = 3.5
+        nh_.hasParam("detections/calibPath") && // default = /home/csrobot/.calibrations/
+        nh_.hasParam("detections/calibFile")) // default = /sunny.yml
+    {
+      nh_.getParam("detections/maxRockSize", MAX_ROCK_SIZE);
+      nh_.getParam("detections/minRockSize", MIN_ROCK_SIZE);
+      nh_.getParam("detections/maxCompactNum", MAX_COMPACT_NUM);
+      nh_.getParam("detections/calibPath", PATH_TO_CALIBRATIONS);
+      nh_.getParam("detections/calibFile", CALIBRATION_FILE);
+    } else {
+      ROS_ERROR("some detection params don't exist, try running %s",
+                "'roslaunch rover_cam_detect detection_settings.launch'");
+      exit(1);
+    }
+
     // getCalibrations() will load up a vector of scalars of min hsv values,
     // 'mins', a vector of scalars of max hsv values, 'max,' 
     // and a vector of scalars of rgba values, 'rgbaAvgs,' 
     // representing the avg rgb value of each min-max pair
-    getCalibrations(); // TODO: problem with file load?
+    getCalibrations();
  
   }
 
@@ -69,8 +92,7 @@ public:
   void getCalibrations()
   { 
     // yaml parsing begins
-    //std::ifstream fin("../sunny.yml", std::ifstream::in);
-    std::string calibrationPath = "/home/csrobot/.calibrations/cloudy.yml";
+    std::string calibrationPath = PATH_TO_CALIBRATIONS + CALIBRATION_FILE;
     std::ifstream fin(calibrationPath.c_str(), std::ifstream::in);
     if (!fin)
     {
@@ -114,6 +136,7 @@ public:
       cvtColor(max, max, CV_HSV2RGB);
       cv::Mat avg = min + max / 2;
 
+      // there is no cool constructor for this :(
       std_msgs::ColorRGBA rgbaAvg;
       rgbaAvg.r = (float)avg.at<cv::Vec3b>(0,0)[0];
       rgbaAvg.g = (float)avg.at<cv::Vec3b>(0,0)[1];
@@ -222,21 +245,36 @@ public:
     //int numContours = contours.size();
     // far away : static const int MAX_ROCK_SIZE = 800;
     // static const int MIN_ROCK_SIZE = 20;
-    static const int MAX_ROCK_SIZE = 1300;
-    static const int MIN_ROCK_SIZE = 100;
-    static const int MAX_COMPACT_NUM = 3.5; // 1 is perfect circle
+ //   static int MAX_ROCK_SIZE;
+ //   static int MIN_ROCK_SIZE;
+ //   static int MAX_COMPACT_NUM;
+ //   // MAX_COMPACT_NUM = 1, for a perfect circle
+
+ //   if (nh_.hasParam("/maxRockSize") && //default = 1300
+ //       nh_.hasParam("/minRockSize") && //default = 100
+ //       nh_.hasParam("/maxCompactNum")) //default = 3.5
+ //   {
+ //     nh_.getParam("/maxRockSize", MAX_ROCK_SIZE);
+ //     nh_.getParam("/minRockSize", MIN_ROCK_SIZE);
+ //     nh_.getParam("/maxCompactNum", MAX_COMPACT_NUM);
+ //   } else {
+ //     ROS_ERROR("some detection params don't exist, try running %s",
+ //               "'roslaunch rover_cam_detect detection_settings.launch'");
+ //     exit(1);
+ //   }
+
     // rock bounding boxes
-    std::vector<cv::Rect> detections;  
+    std::vector<cv::Rect> detections;
     // contour area
     double area(0);
     // contour length 
     double length(0);
     // blob compactness 
     double compactness(0);
-    // blob compactness 
+    // blob entropy
     double entropy(0);
     // number of mask types (warm, cold)
-    int numMaskTypes = 1; 
+    int numMaskTypes = 1;
     
     int numContours = 0;
 
@@ -319,8 +357,8 @@ public:
     //cv::imshow("sat", satMask);
     //cv::imshow("value", hsv[2]);
     //cv::imshow(WINDOW, hsvImg);
-    //cv::imshow("detections!", cv_ptr->image);
-    //cv::waitKey(3);
+    cv::imshow("detections!", cv_ptr->image);
+    cv::waitKey(3);
 
     // publish images    
     image_pub_.publish(cv_ptr->toImageMsg());
