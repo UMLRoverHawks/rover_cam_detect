@@ -3,7 +3,7 @@
   <param name="/detections/calibPath" value="/home/csrobot/.calibrations/" />
   <param name="/detections/calibFile" value="/sunny.yml" />
   <param name="/detections/maxRockSize" value="1300" />
-  <param name="/detections/minRockSize" value="1000" />
+  <param name="/detections/minRockSize" value="10" />
   <param name="/detections/maxCompactNum" value="3.5" />
 
   <param name="/detections/contourArea" value="0" type="double"/>
