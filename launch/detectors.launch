@@ -1,0 +1,17 @@
+<launch>
+
+  <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera0" >
+   <remap from="image" to="image_raw"/>
+  </include>
+  <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera1" >
+   <remap from="image" to="image_raw"/>
+  </include>
+  <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera2" >
+   <remap from="image" to="image_raw"/>
+  </include>
+  <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera3" >
+   <remap from="image" to="image_raw"/>
+  </include>
+
+</launch>
+

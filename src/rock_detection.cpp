@@ -43,7 +43,8 @@ class RockDetection
   std::vector<cv::Scalar> mins; // these vecs each follow the same ordering
   std::vector<cv::Scalar> maxs;
   std::vector<std_msgs::ColorRGBA> rgbaAvgs;
- 
+
+  // config parameters 
   int MAX_ROCK_SIZE;
   int MIN_ROCK_SIZE;
   double MAX_COMPACT_NUM; // MAX_COMPACT_NUM = 1, for a perfect circle
@@ -54,33 +55,30 @@ public:
   RockDetection()
     : it_(nh_)
   {
+   
     image_pub_ = it_.advertise("image_detect", 1);
     image_sub_ = it_.subscribe("image", 1, &RockDetection::imageCb, this);
-    //image_sub_ = it_.subscribe("image_raw", 1, &RockDetection::imageCb, this);
     detect_pub_ = nh_.advertise<rock_publisher::imgDataArray>( "detects", 1000 ) ;
 
-    if (nh_.hasParam("detections/maxRockSize") && // default = 1300
-        nh_.hasParam("detections/minRockSize") && // default = 100
-        nh_.hasParam("detections/maxCompactNum") && // default = 3.5
-        nh_.hasParam("detections/calibPath") && // default = /home/csrobot/.calibrations/
-        nh_.hasParam("detections/calibFile")) // default = /sunny.yml
-    {
-      nh_.getParam("detections/maxRockSize", MAX_ROCK_SIZE);
-      nh_.getParam("detections/minRockSize", MIN_ROCK_SIZE);
-      nh_.getParam("detections/maxCompactNum", MAX_COMPACT_NUM);
-      nh_.getParam("detections/calibPath", PATH_TO_CALIBRATIONS);
-      nh_.getParam("detections/calibFile", CALIBRATION_FILE);
-    } else {
-      ROS_ERROR("some detection params don't exist, try running %s",
-                "'roslaunch rover_cam_detect detection_settings.launch'");
-      exit(1);
-    }
-
-    // getCalibrations() will load up a vector of scalars of min hsv values,
+    // (1) load detection parameters
+    // (2) getCalibrations() will load up a vector of scalars of min hsv values,
     // 'mins', a vector of scalars of max hsv values, 'max,' 
     // and a vector of scalars of rgba values, 'rgbaAvgs,' 
     // representing the avg rgb value of each min-max pair
-    getCalibrations();
+
+//    bool status = getDetectionParams();
+    bool status = false;
+    if( (status = getDetectionParams()) )
+    {
+      status = getCalibrations(); 
+    }
+
+    if(!status)
+    {
+      ROS_ERROR("Could not load calibration or parameters file. Shutting down." );
+      nh_.shutdown();
+      return;
+    }
  
   }
 
@@ -89,24 +87,68 @@ public:
     cv::destroyWindow(WINDOW);
   }
 
-  void getCalibrations()
+  bool getDetectionParams()
+  {
+
+    if (nh_.hasParam("/rover_cam_detect/maxRockSize") && // default = 1300
+        nh_.hasParam("/rover_cam_detect/minRockSize") && // default = 100
+        nh_.hasParam("/rover_cam_detect/maxCompactNum") && // default = 3.5
+        nh_.hasParam("/rover_cam_detect/calibPath") && // default = /home/csrobot/.calibrations/
+        nh_.hasParam("/rover_cam_detect/calibFile") ) // default = /sunny.yml
+    {
+      nh_.getParam("/rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
+      nh_.getParam("/rover_cam_detect/minRockSize", MIN_ROCK_SIZE);
+      nh_.getParam("/rover_cam_detect/maxCompactNum", MAX_COMPACT_NUM);
+      nh_.getParam("/rover_cam_detect/calibPath", PATH_TO_CALIBRATIONS);
+      nh_.getParam("/rover_cam_detect/calibFile", CALIBRATION_FILE);
+ /*     ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
+      ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
+      ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
+      ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
+      ROS_INFO("calibration file: %s\n", CALIBRATION_FILE.c_str());
+*/
+      ROS_INFO("Rock detections parameters loaded!");
+    } 
+    else {
+      ROS_ERROR("some detection params don't exist: are you having namespace issues? ");
+      return false;
+    }
+  
+    return true;
+
+  }
+
+
+  bool getCalibrations()
   { 
     // yaml parsing begins
     std::string calibrationPath = PATH_TO_CALIBRATIONS + CALIBRATION_FILE;
+    ROS_INFO("Loading calibration file: %s\n", calibrationPath.c_str());
+
     std::ifstream fin(calibrationPath.c_str(), std::ifstream::in);
+    
     if (!fin)
     {
       ROS_ERROR("There is no camera calibration file at: %s\n", 
                 calibrationPath.c_str());
-      exit(1);
+      return false; 
     }
-    YAML::Parser parser(fin);
-    YAML::Node calibrationOutput;
-    parser.GetNextDocument(calibrationOutput);
 
-    getHsvMinsAndMaxesFromYaml(calibrationOutput);
+    try {
+       YAML::Parser parser(fin);
+       YAML::Node calibrationOutput;
+       parser.GetNextDocument(calibrationOutput);
 
-    calcRgbAveragesForBoxColors();
+       getHsvMinsAndMaxesFromYaml(calibrationOutput);
+
+       calcRgbAveragesForBoxColors();
+     }
+     catch(YAML::ParserException& e) {
+       std::cout << e.what() << "\n";
+       return false;
+     }
+    
+     return true; 
   } 
 
   void getHsvMinsAndMaxesFromYaml(const YAML::Node& cal)
@@ -379,5 +421,6 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "rover_cam_detect");
   RockDetection rd;
   ros::spin();
+  //ros::spinOnce();
   return 0;
 }
