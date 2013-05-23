@@ -66,7 +66,7 @@ public:
     // and a vector of scalars of rgba values, 'rgbaAvgs,' 
     // representing the avg rgb value of each min-max pair
 
-//    bool status = getDetectionParams();
+
     bool status = false;
     if( (status = getDetectionParams()) )
     {
@@ -90,20 +90,37 @@ public:
   bool getDetectionParams()
   {
 
-    if (nh_.hasParam("/rover_cam_detect/maxRockSize") && // default = 1300
-        nh_.hasParam("/rover_cam_detect/minRockSize") && // default = 100
-        nh_.hasParam("/rover_cam_detect/maxCompactNum") && // default = 3.5
-        nh_.hasParam("/rover_cam_detect/calibPath") && // default = /home/csrobot/.calibrations/
-        nh_.hasParam("/rover_cam_detect/calibFile") ) // default = /sunny.yml
+/*   DEBUG namespace/topic name test
+    if (nh_.hasParam("maxRockSize") )
     {
-      nh_.getParam("/rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
-      nh_.getParam("/rover_cam_detect/minRockSize", MIN_ROCK_SIZE);
-      nh_.getParam("/rover_cam_detect/maxCompactNum", MAX_COMPACT_NUM);
-      nh_.getParam("/rover_cam_detect/calibPath", PATH_TO_CALIBRATIONS);
-      nh_.getParam("/rover_cam_detect/calibFile", CALIBRATION_FILE);
- /*     ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
+   	ROS_INFO(" a Found it");
+	return true;
+    }  
+    if (nh_.hasParam("/rover_cam_detect/maxRockSize") )
+    {
+   	ROS_INFO(" b Found it");
+	return true;
+    }  
+    if (nh_.hasParam("rover_cam_detect/maxRockSize") )
+    {
+   	ROS_INFO(" c Found it");
+	return true;
+    }  
+*/ 
+    if (nh_.hasParam("rover_cam_detect/maxRockSize") && // default = 1300
+        nh_.hasParam("rover_cam_detect/minRockSize") && // default = 100
+        nh_.hasParam("rover_cam_detect/maxCompactNum") && // default = 3.5
+        nh_.hasParam("rover_cam_detect/calibPath") && // default = /home/csrobot/.calibrations/
+        nh_.hasParam("rover_cam_detect/calibFile") ) // default = /sunny.yml
+    {
+      nh_.getParam("rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
+      nh_.getParam("rover_cam_detect/minRockSize", MIN_ROCK_SIZE);
+      nh_.getParam("rover_cam_detect/maxCompactNum", MAX_COMPACT_NUM);
+      nh_.getParam("rover_cam_detect/calibPath", PATH_TO_CALIBRATIONS);
+      nh_.getParam("rover_cam_detect/calibFile", CALIBRATION_FILE);
+      ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
       ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
-      ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
+    /*  ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
       ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
       ROS_INFO("calibration file: %s\n", CALIBRATION_FILE.c_str());
 */
@@ -160,11 +177,13 @@ public:
       cal["colors"][i]["mins"]["s"] >> s;
       cal["colors"][i]["mins"]["v"] >> v;
       mins.push_back(cv::Scalar(h, s, v));
+      ROS_INFO("min hsv : %d %d %d", h, s, v);
 
       cal["colors"][i]["maxs"]["h"] >> h;
       cal["colors"][i]["maxs"]["s"] >> s;
       cal["colors"][i]["maxs"]["v"] >> v;
       maxs.push_back(cv::Scalar(h, s, v));
+      ROS_INFO("max hsv : %d %d %d", h, s, v);
     }
   }
 

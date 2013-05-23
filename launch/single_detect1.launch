@@ -1,8 +1,8 @@
 <launch>
 
-  <node name="rover_cam_detect1" pkg="rover_cam_detect" type="rover_cam_detect" respawn="false" output="screen" ns= "camera1" >
+  <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera1" >
    <remap from="image" to="image_raw"/>
-  </node>
+  </include>
 
 </launch>
 

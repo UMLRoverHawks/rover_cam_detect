@@ -4,8 +4,8 @@
    	<remap from="image" to="image_raw"/>
   	<param name="calibPath" value="/home/csrobot/.calibrations/" />
   	<param name="calibFile" value="cloudy.yml" />
-  	<param name="maxRockSize" value="1300" />
-  	<param name="minRockSize" value="10" />
+  	<param name="maxRockSize" value="1000" />
+  	<param name="minRockSize" value="100" />
   	<param name="maxCompactNum" value="3.5" />
   	<param name="contourArea" value="0" type="double"/>
   	<param name="contourLength" value="0" type="double"/>
