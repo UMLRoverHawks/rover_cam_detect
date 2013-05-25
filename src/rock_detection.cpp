@@ -1,6 +1,5 @@
 #include <ros/ros.h>
 
-
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
@@ -60,7 +59,7 @@ class RockDetection
 
 public:
   RockDetection()
-    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(1000), MIN_ROCK_SIZE(100), MAX_COMPACT_NUM(3.0), SHOW_VIZ(true)
+    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(1000), MIN_ROCK_SIZE(100), MAX_COMPACT_NUM(3.0), SHOW_VIZ(false)
   {
   
     bool latch = true; 
@@ -139,8 +138,9 @@ public:
     
     if (!fin)
     {
-      ROS_ERROR("There is no camera calibration file at: %s\n", 
+      ROS_ERROR("There is no color calibration file at: %s\n", 
                 calibrationPath.c_str());
+      ROS_ERROR("HEY!! DID YOU COPY default_calib.yml (in /rover_cam_detect) info the .calibrations directory? Do this if you for test and/or haven't already done another calibration and changed the parameter setting in the launch file...."); 
       return false; 
     }
 
@@ -230,8 +230,8 @@ public:
     
     // reduce image size (faster processing, less detail) and apply Gauss blur
     //pyrMeanShiftFiltering(cv_ptr->image, hsvImg, 5, 15);
-    //cv::pyrDown(cv_ptr->image, hsvImg);
-    cv::pyrDown(hsvImg, hsvImg);
+    //cv::pyrDown(hsvImg, hsvImg);
+    cv::pyrDown(cv_ptr->image, hsvImg);
     hsvImg = equalizeIntensity(hsvImg.clone());
 
     // convert to HSV
@@ -241,37 +241,25 @@ public:
     // split channels
     std::vector<cv::Mat> hsv;
     split(hsvImg, hsv);
-   
+  
     // threshold based upon hue channel
     // define colors as ranges or with a color radius
     // H: 0 - 180, S: 0 - 255 
+/*  Defines contents of default_calib.yml file   
     int radius = 15; 
     static const int green = 60;
     static const int purple = 135;
     static const int lightBlue = 100;
     static const int yellow = 30;
     static const int orange = 15 ;
-    
-
-    // (!!!) this is going away soon. 
-    inRange(hsv[0], green-radius, green+radius, mask2);
-    coldMask = mask2.clone();
-    inRange(hsv[0], purple-radius, purple+radius, mask2);
-    coldMask |= mask2; // want XOR
-    inRange(hsv[0], lightBlue-radius, lightBlue+radius, mask2);
-    coldMask |= mask2;
-
-    inRange(hsv[0], orange-radius, orange+radius, warmMask);
-    inRange(hsv[0], yellow-radius, yellow+radius, mask2);
-    warmMask |= mask2;
-
+ */   
     // Apply thresholds from calibration
     // mins / maxs
     int numColors = mins.size(); 
     cv::Mat hueMask =  cv::Mat::zeros(hsv[0].rows, hsv[0].cols, CV_8U);
-    hueMask = warmMask + coldMask;
+ //   hueMask = warmMask + coldMask;
+   
     
-/*  testing UGLINESS 
     for(int j=0; j<numColors; ++j)
     { 
 	int hMin = mins[j][0];
@@ -282,32 +270,29 @@ public:
 	int sDiff = sMax-sMin;
 	int vMin = mins[j][2];
 	int vMax = maxs[j][2];
-  	//ROS_INFO("min %d  max %d", hMin, hMax);
-  	//ROS_INFO("min %d  max %d", sMin, sMax);
     	//inRange(hsv[0], hMin+0.10*hDiff, hMax+0.1*hDiff, hueMask);
-    	inRange(hsv[0], hMin-0.10*hDiff, hMax-0.1*hDiff, hueMask);
-    //	inRange(hsv[0], hMin, hMax, hueMask);
-    	//inRange(hsv[0], 15, 45, hueMask);
+    	//inRange(hsv[0], hMin-0.10*hDiff, hMax-0.1*hDiff, hueMask);
+    	inRange(hsv[0], hMin, hMax, mask);
     	//inRange(hsv[1], sMin, sMax, mask);
-    	//inRange(hsv[1], sMin, sMax, satMaskTest);
-        //hueMask |= mask;
-        //hueMask &= satMaskTest;
+        hueMask |= mask;
 	
     }
-*/
+    
     // Threshold using a minimum saturation level. Low saturation
     // colors are whites/browns/grays which we don't want 
     inRange(hsv[1], minSaturation_, 255,satMask); 
     // AND mask with saturation channel
     hueMask &= satMask;  
    
+    //cv::imshow("hue mask", hueMask);
+
     // apply morphological operations to get rid of noise
     static int dilationElem = cv::MORPH_RECT; // create me once!
     static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(5,5)); // create me once!
 
     // erode image to get rid of small noisy pixels in background
     erode(hueMask, mask, structureElem);
-      
+     
     // --------- start shape detection processing ------------ // 
     // use findContours to filter and blob detected rocks
     std::vector<std::vector<cv::Point> > contours;
@@ -344,9 +329,9 @@ public:
 	 // calculate entropy on detection ROI (look for areas with low entropy)
 	 // (not being used at the moment)
 	 rect =  boundingRect(contours[i]);
-	 //cv::Mat roi = hsv[0](rect);
-	 //cv::Scalar mn = 0, stdev = 0;
-	 //meanStdDev(roi, mn, stdev);
+	 cv::Mat roi = hsv[0](rect);
+	 cv::Scalar mn = 0, stdev = 0;
+	 meanStdDev(roi, mn, stdev);
 		
 	 if( area < MAX_ROCK_SIZE && area > MIN_ROCK_SIZE )
 	 {	
@@ -373,8 +358,9 @@ public:
 	 }
     }
 
-/*
-    if(SHOW_VIZ) 
+
+   // Algorithm visualization
+   if(SHOW_VIZ) 
     {
        	// merge results
        	merge(hsv, hsvImg);
@@ -403,7 +389,7 @@ public:
     	cv::imshow("value - lightness", hsv[2]);
     	cv::imshow("detections!", cv_ptr->image);
     }
-*/
+
     // publish detection image (with bounding boxes)   
     image_pub_.publish(cv_ptr->toImageMsg());
 

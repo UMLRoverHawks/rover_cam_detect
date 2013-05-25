@@ -3,13 +3,10 @@
   <node name="rover_cam_detect" pkg="rover_cam_detect" type="rover_cam_detect" output="screen" >
    	<remap from="image" to="image_raw"/>
   	<param name="calibPath" value="/home/csrobot/.calibrations/" />
-  	<param name="calibFile" value="cloudy.yml" />
+  	<param name="calibFile" value="default_calib.yml" />
   	<param name="maxRockSize" value="1000" />
-  	<param name="minRockSize" value="100" />
+  	<param name="minRockSize" value="200" />
   	<param name="maxCompactNum" value="3.5" />
-  	<param name="contourArea" value="0" type="double"/>
-  	<param name="contourLength" value="0" type="double"/>
-  	<param name="blobCompactness" value="0" type="double"/>
   </node>
 </launch>
 

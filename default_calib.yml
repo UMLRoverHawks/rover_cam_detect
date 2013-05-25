@@ -1,0 +1,50 @@
+%YAML:1.0
+colors:
+# default calibration for current lab rock set. used for awesome
+# demo brigit did. :P
+# colors in order: green, purple, lightBlue, yellow, orange 
+   -
+      mins:
+         h: 45 
+         s: 0 
+         v: 0 
+      maxs:
+         h: 85 
+         s: 0 
+         v: 0 
+   -
+      mins:
+         h: 120 
+         s: 0 
+         v: 0 
+      maxs:
+         h: 150 
+         s: 0 
+         v: 0 
+   -
+      mins:
+         h: 85 
+         s: 0 
+         v: 0 
+      maxs:
+         h: 115 
+         s: 0 
+         v: 0 
+   -
+      mins:
+         h: 15 
+         s: 0 
+         v: 0 
+      maxs:
+         h: 45 
+         s: 0 
+         v: 0 
+   -
+      mins:
+         h: 0 
+         s: 0 
+         v: 0 
+      maxs:
+         h: 30 
+         s: 0 
+         v: 0 
