@@ -4,7 +4,9 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
-#include <std_msgs/ColorRGBA.h>
+#include <std_msgs/ColorRGBA.h> 
+#include <std_msgs/Int32.h> 
+#include <std_msgs/String.h> 
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/core/core.hpp>
@@ -26,6 +28,9 @@ class RockDetection
   image_transport::Subscriber image_sub_;
   image_transport::Publisher image_pub_;
   ros::Publisher detect_pub_;
+  // detector parameters
+  ros::Subscriber saturation_sub_; // get adjustment from UI slider
+  ros::Publisher saturation_pub_; // get adjustment from UI slider
 
   // Reusable images
   // convert to HSV
@@ -45,21 +50,27 @@ class RockDetection
   std::vector<std_msgs::ColorRGBA> rgbaAvgs;
 
   // config parameters 
+  int minSaturation_;
   int MAX_ROCK_SIZE;
   int MIN_ROCK_SIZE;
   double MAX_COMPACT_NUM; // MAX_COMPACT_NUM = 1, for a perfect circle
   std::string PATH_TO_CALIBRATIONS;
   std::string CALIBRATION_FILE;
+  bool SHOW_VIZ; // show debug visualizations
 
 public:
   RockDetection()
-    : it_(nh_)
+    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(1000), MIN_ROCK_SIZE(100), MAX_COMPACT_NUM(3.0), SHOW_VIZ(true)
   {
-   
+  
+    bool latch = true; 
     image_pub_ = it_.advertise("image_detect", 1);
     image_sub_ = it_.subscribe("image", 1, &RockDetection::imageCb, this);
     detect_pub_ = nh_.advertise<rock_publisher::imgDataArray>( "detects", 1000 ) ;
-
+    // parameter pub/sub
+    saturation_sub_ = nh_.subscribe("detect_saturation", 1, &RockDetection::saturationCb, this);
+    saturation_pub_ = nh_.advertise<std_msgs::Int32>("detect_saturation_info", 1, latch);
+  
     // (1) load detection parameters
     // (2) getCalibrations() will load up a vector of scalars of min hsv values,
     // 'mins', a vector of scalars of max hsv values, 'max,' 
@@ -89,38 +100,20 @@ public:
 
   bool getDetectionParams()
   {
-
-/*   DEBUG namespace/topic name test
-    if (nh_.hasParam("maxRockSize") )
-    {
-   	ROS_INFO(" a Found it");
-	return true;
-    }  
-    if (nh_.hasParam("/rover_cam_detect/maxRockSize") )
-    {
-   	ROS_INFO(" b Found it");
-	return true;
-    }  
-    if (nh_.hasParam("rover_cam_detect/maxRockSize") )
-    {
-   	ROS_INFO(" c Found it");
-	return true;
-    }  
-*/ 
     if (nh_.hasParam("rover_cam_detect/maxRockSize") && // default = 1300
         nh_.hasParam("rover_cam_detect/minRockSize") && // default = 100
         nh_.hasParam("rover_cam_detect/maxCompactNum") && // default = 3.5
         nh_.hasParam("rover_cam_detect/calibPath") && // default = /home/csrobot/.calibrations/
         nh_.hasParam("rover_cam_detect/calibFile") ) // default = /sunny.yml
     {
-      nh_.getParam("rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
+
       nh_.getParam("rover_cam_detect/minRockSize", MIN_ROCK_SIZE);
       nh_.getParam("rover_cam_detect/maxCompactNum", MAX_COMPACT_NUM);
       nh_.getParam("rover_cam_detect/calibPath", PATH_TO_CALIBRATIONS);
       nh_.getParam("rover_cam_detect/calibFile", CALIBRATION_FILE);
       ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
       ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
-    /*  ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
+/*    ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
       ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
       ROS_INFO("calibration file: %s\n", CALIBRATION_FILE.c_str());
 */
@@ -230,14 +223,18 @@ public:
       return;
     }
 
-
     // do image processing here
     // OpenCV Mat image is cv_ptr->image
 
-    // convert to HSV
+    // --------- start color processing ------------ // 
+    
     // reduce image size (faster processing, less detail) and apply Gauss blur
-    cv::pyrDown(cv_ptr->image, hsvImg);
+    //pyrMeanShiftFiltering(cv_ptr->image, hsvImg, 5, 15);
+    //cv::pyrDown(cv_ptr->image, hsvImg);
+    cv::pyrDown(hsvImg, hsvImg);
+    hsvImg = equalizeIntensity(hsvImg.clone());
 
+    // convert to HSV
     cvtColor(hsvImg, hsvImg, CV_BGR2HSV,  CV_8U);
     //cvtColor(cv_ptr->image, hsvImg, CV_BGR2HSV,  CV_8U);
 
@@ -255,6 +252,8 @@ public:
     static const int yellow = 30;
     static const int orange = 15 ;
     
+
+    // (!!!) this is going away soon. 
     inRange(hsv[0], green-radius, green+radius, mask2);
     coldMask = mask2.clone();
     inRange(hsv[0], purple-radius, purple+radius, mask2);
@@ -266,66 +265,59 @@ public:
     inRange(hsv[0], yellow-radius, yellow+radius, mask2);
     warmMask |= mask2;
 
-    // threshold on saturation channel (get rid of low saturation pixels:
-    // white/brown)
-    inRange(hsv[1], 50, 255,satMask); // yay!!
-    //inRange(hsv[1], 100, 255, highSatMask); // yay!!
-    inRange(hsv[1], 50, 255, highSatMask); // yay!!
+    // Apply thresholds from calibration
+    // mins / maxs
+    int numColors = mins.size(); 
+    cv::Mat hueMask =  cv::Mat::zeros(hsv[0].rows, hsv[0].cols, CV_8U);
+    hueMask = warmMask + coldMask;
     
+/*  testing UGLINESS 
+    for(int j=0; j<numColors; ++j)
+    { 
+	int hMin = mins[j][0];
+	int hMax = maxs[j][0];
+	int hDiff = hMax-hMin;
+	int sMin = mins[j][1];
+	int sMax = maxs[j][1];
+	int sDiff = sMax-sMin;
+	int vMin = mins[j][2];
+	int vMax = maxs[j][2];
+  	//ROS_INFO("min %d  max %d", hMin, hMax);
+  	//ROS_INFO("min %d  max %d", sMin, sMax);
+    	//inRange(hsv[0], hMin+0.10*hDiff, hMax+0.1*hDiff, hueMask);
+    	inRange(hsv[0], hMin-0.10*hDiff, hMax-0.1*hDiff, hueMask);
+    //	inRange(hsv[0], hMin, hMax, hueMask);
+    	//inRange(hsv[0], 15, 45, hueMask);
+    	//inRange(hsv[1], sMin, sMax, mask);
+    	//inRange(hsv[1], sMin, sMax, satMaskTest);
+        //hueMask |= mask;
+        //hueMask &= satMaskTest;
+	
+    }
+*/
+    // Threshold using a minimum saturation level. Low saturation
+    // colors are whites/browns/grays which we don't want 
+    inRange(hsv[1], minSaturation_, 255,satMask); 
     // AND mask with saturation channel
-    coldMask &= satMask; // works OK  with current color calibration 
-    //warmMask &= satMask; // works OK  with current color calibration 
-    warmMask &= highSatMask; // works OK  with current color calibration 
+    hueMask &= satMask;  
    
     // apply morphological operations to get rid of noise
     static int dilationElem = cv::MORPH_RECT; // create me once!
-    //static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(9,9)); 
     static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(5,5)); // create me once!
-    //morphologyEx(warmMask, warmMask, cv::MORPH_OPEN, structureElem);
-    erode(warmMask, warmMask, structureElem);
 
-    // merge different masks
-    mask = coldMask + warmMask;
-    
+    // erode image to get rid of small noisy pixels in background
+    erode(hueMask, mask, structureElem);
+      
+    // --------- start shape detection processing ------------ // 
     // use findContours to filter and blob detected rocks
-    //std::vector<std::vector<cv::Point> > contours;
-    std::vector<std::vector<cv::Point> > warmContours;
-    std::vector<std::vector<cv::Point> > coldContours;
+    std::vector<std::vector<cv::Point> > contours;
     std::vector<cv::Vec4i> hierarchy;
 
     // running this on mask seems to alter it
-    //findContours(mask, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE); 
-    //findContours(satMask, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE); 
-    // for close range targets:
-    //findContours(coldMask.clone(), coldContours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_NONE); 
-    //findContours(warmMask.clone(), warmContours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_NONE); 
-    findContours(coldMask.clone(), coldContours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_L1); 
-    findContours(warmMask.clone(), warmContours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_L1); 
+    //findContours(mask.clone(), contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE); 
+    //findContours(mask.clone(), contours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_NONE); 
+    findContours(mask.clone(), contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_L1); 
  
-    // dynamic? 
-    //int numContours = contours.size();
-    // far away : static const int MAX_ROCK_SIZE = 800;
-    // static const int MIN_ROCK_SIZE = 20;
- //   static int MAX_ROCK_SIZE;
- //   static int MIN_ROCK_SIZE;
- //   static int MAX_COMPACT_NUM;
- //   // MAX_COMPACT_NUM = 1, for a perfect circle
-
- //   if (nh_.hasParam("/maxRockSize") && //default = 1300
- //       nh_.hasParam("/minRockSize") && //default = 100
- //       nh_.hasParam("/maxCompactNum")) //default = 3.5
- //   {
- //     nh_.getParam("/maxRockSize", MAX_ROCK_SIZE);
- //     nh_.getParam("/minRockSize", MIN_ROCK_SIZE);
- //     nh_.getParam("/maxCompactNum", MAX_COMPACT_NUM);
- //   } else {
- //     ROS_ERROR("some detection params don't exist, try running %s",
- //               "'roslaunch rover_cam_detect detection_settings.launch'");
- //     exit(1);
- //   }
-
-    // rock bounding boxes
-    std::vector<cv::Rect> detections;
     // contour area
     double area(0);
     // contour length 
@@ -334,16 +326,10 @@ public:
     double compactness(0);
     // blob entropy
     double entropy(0);
-    // number of mask types (warm, cold)
-    int numMaskTypes = 1;
-    
-    int numContours = 0;
-
-    //printf("%d coldContours\n", coldContours.size() );
-    //printf("%d warmContours\n", warmContours.size());
+    // processing rectangle
+    cv::Rect rect;
 	
-    coldContours.insert( coldContours.end(), warmContours.begin(), warmContours.end() );
-    numContours = coldContours.size();
+    int numContours = contours.size();
 
     // Detection data structures for publishing
     rock_publisher::imgData rockData ;
@@ -352,32 +338,28 @@ public:
     for(int i; i< numContours; ++i)
     {
 	 // a contour is an array points
-	 length = arcLength(coldContours[i], true);
-	 area = contourArea(coldContours[i]);
+	 length = arcLength(contours[i], true);
+	 area = contourArea(contours[i]);
 	 compactness = (length*length) / (4 * 3.14159 * area);
-	 // calculate entropy on detection ROI
-	 cv::Rect rect =  boundingRect(coldContours[i]);
-	 cv::Mat roi = hsv[0](rect);
-	 cv::Scalar mn = 0, stdev = 0;
-	 meanStdDev(roi, mn, stdev);	
-	 // width-to-height ratios
-	 float hToW = rect.height/rect.width;	  
-	 float wToH =  rect.width/rect.height;	  
-	
-
+	 // calculate entropy on detection ROI (look for areas with low entropy)
+	 // (not being used at the moment)
+	 rect =  boundingRect(contours[i]);
+	 //cv::Mat roi = hsv[0](rect);
+	 //cv::Scalar mn = 0, stdev = 0;
+	 //meanStdDev(roi, mn, stdev);
+		
 	 if( area < MAX_ROCK_SIZE && area > MIN_ROCK_SIZE )
 	 {	
 		//printf("contour %d: a = %f l = %f [compact = %f]\n", i, area, length, compactness);
 		//printf("contour %d: mn = %f stdev = %f\n",i, mn.val[0], stdev.val[0]);
 
 		// draw rectangle
-		//if( hToW > 0.20 || wToH > 0.20 )
 		if( compactness < MAX_COMPACT_NUM )
          	{
 			//printf("contour %d: mn = %f stdev = %f\n",i, mn.val[0], stdev.val[0]);
 			//printf("contour %d: a = %f l = %f [compact = %f]\n", i, area, length, compactness);
 			cv::rectangle(cv_ptr->image, 2*rect.tl(), 2*rect.br(),  cv::Scalar(0,255,0), 2);
-			//cv::drawContours(cv_ptr->image, coldContours, i, cv::Scalar(0,0,255), 2); 
+			//cv::drawContours(cv_ptr->image, contours, i, cv::Scalar(0,0,255), 2); 
 
 			// ----------- add detections to array of detections -----------------
 			rockData.x = rect.x ;
@@ -391,37 +373,38 @@ public:
 	 }
     }
 
-    // only for visualization	    
-    // merge results
-    merge(hsv, hsvImg);
+//    if(SHOW_VIZ) 
+//    {
+       	// only for visualization	    
+       	// merge results
+       	merge(hsv, hsvImg);
+       	// convert back to RGB
+       	static cv::Mat rgbImg; 
+       	cvtColor(hsvImg, rgbImg , CV_HSV2BGR,  CV_8U);
 
-    // convert back to RGB
-    static cv::Mat rgbImg; 
-    cvtColor(hsvImg, rgbImg , CV_HSV2BGR,  CV_8U);
+        // just show colored rocks (RGB mask)
+       	std::vector<cv::Mat> rgb;
+    	rgb.push_back(mask);
+    	rgb.push_back(mask);
+    	rgb.push_back(mask);
+    	cv::Mat rgbMask;
+    	merge(rgb, rgbMask);
+    	rgbImg &= rgbMask;
 
-    // just show colored rocks (RGB mask)
-    std::vector<cv::Mat> rgb;
-    rgb.push_back(mask);
-    rgb.push_back(mask);
-    rgb.push_back(mask);
-    cv::Mat rgbMask;
-    merge(rgb, rgbMask);
-    rgbImg &= rgbMask;
+    	// resize image to original scale
+    	pyrUp(rgbImg, rgbImg);
 
-    // resize image to original scale
+    	//cv::imshow("mask", mask);
+    	cv::imshow("sat mask", satMask);
+    	cv::imshow("hue mask", hueMask);
+    	cv::imshow("mask rgb", rgbImg);
+    	cv::imshow("hue", hsv[0]);
+    	cv::imshow("saturation", hsv[1]);
+    	cv::imshow("value - lightness", hsv[2]);
+    	cv::imshow("detections!", cv_ptr->image);
+ //   }
 
-    pyrUp(rgbImg, rgbImg);
-
-    //cv::imshow("mask", mask);
-    //cv::imshow("mask rgb", rgbImg);
-    //cv::imshow("small img rgb", imgSmall);
-    //cv::imshow("sat", satMask);
-    //cv::imshow("value", hsv[2]);
-    //cv::imshow(WINDOW, hsvImg);
-    cv::imshow("detections!", cv_ptr->image);
-    cv::waitKey(3);
-
-    // publish images    
+    // publish detection image (with bounding boxes)   
     image_pub_.publish(cv_ptr->toImageMsg());
 
     // publish detections
@@ -432,8 +415,43 @@ public:
 
   }
 
+  // Adjust the min saturation 
+  inline void saturationCb(const std_msgs::Int32::ConstPtr& msg)
+  {
+    if(msg->data <= 255)
+    {
+	minSaturation_ = msg->data;
+	ROS_INFO("Saturation adjusted: %d", minSaturation_);
+	saturation_pub_.publish(msg); // ECHO!
+    }  
+  }
 
-};
+  // Apply histogram equalization 
+  cv::Mat equalizeIntensity(const cv::Mat& inputImage)
+  {
+    if(inputImage.channels() >= 3)
+    {
+        cv::Mat hsv;
+
+        cvtColor(inputImage,hsv,CV_BGR2HSV);
+
+        std::vector<cv::Mat> channels;
+        split(hsv,channels);
+
+        equalizeHist(channels[2], channels[2]);
+
+        cv::Mat result;
+        merge(channels,hsv);
+
+        cvtColor(hsv,result,CV_HSV2BGR);
+        //cvtColor(hsv,result,CV_BGR2HSV);
+
+        return result;
+    }
+    return cv::Mat();
+ }
+
+}; 
 
 int main(int argc, char** argv)
 {
