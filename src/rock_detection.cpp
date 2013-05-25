@@ -373,9 +373,9 @@ public:
 	 }
     }
 
-//    if(SHOW_VIZ) 
-//    {
-       	// only for visualization	    
+/*
+    if(SHOW_VIZ) 
+    {
        	// merge results
        	merge(hsv, hsvImg);
        	// convert back to RGB
@@ -402,8 +402,8 @@ public:
     	cv::imshow("saturation", hsv[1]);
     	cv::imshow("value - lightness", hsv[2]);
     	cv::imshow("detections!", cv_ptr->image);
- //   }
-
+    }
+*/
     // publish detection image (with bounding boxes)   
     image_pub_.publish(cv_ptr->toImageMsg());
 
