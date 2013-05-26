@@ -20,6 +20,12 @@ namespace enc = sensor_msgs::image_encodings;
 
 static const char WINDOW[] = "Image window";
 
+// Enumerate different rock colors (subject to change
+// based upon UI input)
+enum colors_ { green_ = 0, purple_, blue_,
+               yellow_, orange_, red1_, red2_, numColors_ };
+
+
 class RockDetection
 {
   ros::NodeHandle nh_;
@@ -43,9 +49,12 @@ class RockDetection
   cv::Mat satMask;
   cv::Mat highSatMask;
 
-  // calibration things
-  std::vector<cv::Scalar> mins; // these vecs each follow the same ordering
-  std::vector<cv::Scalar> maxs;
+  // color calibration:
+  // use a vector of vectors as a calibration 'stack' 
+  // to accomondate on the fly calibration
+  std::vector< std::vector<cv::Scalar> > mins; // these vecs each follow the same ordering
+  std::vector<std::vector<cv::Scalar> > maxs;
+  
   std::vector<std_msgs::ColorRGBA> rgbaAvgs;
 
   // config parameters 
@@ -149,9 +158,11 @@ public:
        YAML::Node calibrationOutput;
        parser.GetNextDocument(calibrationOutput);
 
+       initCalibrationVectors();
+
        getHsvMinsAndMaxesFromYaml(calibrationOutput);
 
-       calcRgbAveragesForBoxColors();
+       //calcRgbAveragesForBoxColors();
      }
      catch(YAML::ParserException& e) {
        std::cout << e.what() << "\n";
@@ -161,32 +172,56 @@ public:
      return true; 
   } 
 
+  void initCalibrationVectors()
+  {
+ 
+      // initialize calibration vectors to 0
+      std::vector<cv::Scalar> vec(1,cv::Scalar(-1,-1,-1));
+  
+      // add vectors (containing thresholds) for each color 
+      for(unsigned i = 0; i<numColors_; ++i)
+      { 
+ 	mins.push_back(vec);
+	maxs.push_back(vec);
+      }
+        
+  }
+
+  // TODO: update this based upon new color identifiers
   void getHsvMinsAndMaxesFromYaml(const YAML::Node& cal)
   {
+    // Read in color calibrations (thresholds) based up
+    // number available (this will change when we have a fixed #)
     for (unsigned i = 0; i < cal["colors"].size(); ++i)
     { // for each color
       int h, s, v;
       cal["colors"][i]["mins"]["h"] >> h;
       cal["colors"][i]["mins"]["s"] >> s;
       cal["colors"][i]["mins"]["v"] >> v;
-      mins.push_back(cv::Scalar(h, s, v));
+      mins[i].push_back(cv::Scalar(h, s, v)); // use vec of vecs
+      //mins.push_back(cv::Scalar(h, s, v));
       ROS_INFO("min hsv : %d %d %d", h, s, v);
 
       cal["colors"][i]["maxs"]["h"] >> h;
       cal["colors"][i]["maxs"]["s"] >> s;
       cal["colors"][i]["maxs"]["v"] >> v;
-      maxs.push_back(cv::Scalar(h, s, v));
+      maxs[i].push_back(cv::Scalar(h, s, v));
+      //maxs.push_back(cv::Scalar(h, s, v));
       ROS_INFO("max hsv : %d %d %d", h, s, v);
     }
+
+    ROS_INFO("Done loading yaml calibration file.");
   }
 
   void calcRgbAveragesForBoxColors()
   {
     for (unsigned i = 0; i < mins.size(); ++i)
     {
-      cv::Mat min(1, 1, CV_8UC3, mins.at(i));
+      cv::Mat min(1, 1, CV_8UC3, mins[i].back() ); // use last or 'latest' calibration value
+      //cv::Mat min(1, 1, CV_8UC3, mins.at(i));
       cvtColor(min, min, CV_HSV2RGB);
-      cv::Mat max(1, 1, CV_8UC3, maxs.at(i));
+      cv::Mat max(1, 1, CV_8UC3, maxs[i].back() );
+      //cv::Mat max(1, 1, CV_8UC3, maxs.at(i));
       cvtColor(max, max, CV_HSV2RGB);
       cv::Mat avg = min + max / 2;
 
@@ -255,27 +290,33 @@ public:
  */   
     // Apply thresholds from calibration
     // mins / maxs
-    int numColors = mins.size(); 
     cv::Mat hueMask =  cv::Mat::zeros(hsv[0].rows, hsv[0].cols, CV_8U);
- //   hueMask = warmMask + coldMask;
-   
     
-    for(int j=0; j<numColors; ++j)
-    { 
-	int hMin = mins[j][0];
-	int hMax = maxs[j][0];
+    for(int j=0; j<numColors_; ++j) // use pre-decided set of colors size
+    {
+	// skip if no calibration provided for this color (init'd to -1) 
+	if( ( mins[j].back() )[0] == -1 )
+		continue; 
+
+	cv::Scalar &hsvMin = mins[j].back();  // Scalar for given color
+	cv::Scalar &hsvMax = maxs[j].back();
+	int hMin = hsvMin[0]; // index into a Scalar
+	int hMax = hsvMax[0];
 	int hDiff = hMax-hMin;
-	int sMin = mins[j][1];
-	int sMax = maxs[j][1];
+	int sMin = hsvMin[1];
+	int sMax = hsvMax[1];
 	int sDiff = sMax-sMin;
-	int vMin = mins[j][2];
-	int vMax = maxs[j][2];
+	int vMin = hsvMin[2];
+	int vMax = hsvMax[2];
     	//inRange(hsv[0], hMin+0.10*hDiff, hMax+0.1*hDiff, hueMask);
     	//inRange(hsv[0], hMin-0.10*hDiff, hMax-0.1*hDiff, hueMask);
     	inRange(hsv[0], hMin, hMax, mask);
-    	//inRange(hsv[1], sMin, sMax, mask);
-        hueMask |= mask;
-	
+    	//inRange(hsv[1], sMin, sMax, mask2);
+        //mask &= mask2;
+        // merge current color mask with others
+        hueMask |= mask; 
+
+//	ROS_INFO("%d", hMin);		
     }
     
     // Threshold using a minimum saturation level. Low saturation
@@ -328,10 +369,10 @@ public:
 	 compactness = (length*length) / (4 * 3.14159 * area);
 	 // calculate entropy on detection ROI (look for areas with low entropy)
 	 // (not being used at the moment)
-	 rect =  boundingRect(contours[i]);
-	 cv::Mat roi = hsv[0](rect);
-	 cv::Scalar mn = 0, stdev = 0;
-	 meanStdDev(roi, mn, stdev);
+	 //rect =  boundingRect(contours[i]);
+	 //cv::Mat roi = hsv[0](rect);
+	 //cv::Scalar mn = 0, stdev = 0;
+	 //meanStdDev(roi, mn, stdev);
 		
 	 if( area < MAX_ROCK_SIZE && area > MIN_ROCK_SIZE )
 	 {	
@@ -341,6 +382,12 @@ public:
 		// draw rectangle
 		if( compactness < MAX_COMPACT_NUM )
          	{
+			// get average rbg color of contour bbox 
+	 		rect =  boundingRect(contours[i]);
+			static cv::Scalar rgbMean, rgbSd;
+			//std_msgs::ColorRGBA rectColor = computeROIStats(cv_ptr->image, rect, rgbMean, rgbSd);
+			rock_publisher::colorRGBA rectColor = computeROIStats(cv_ptr->image, rect, rgbMean, rgbSd);
+
 			//printf("contour %d: mn = %f stdev = %f\n",i, mn.val[0], stdev.val[0]);
 			//printf("contour %d: a = %f l = %f [compact = %f]\n", i, area, length, compactness);
 			cv::rectangle(cv_ptr->image, 2*rect.tl(), 2*rect.br(),  cv::Scalar(0,255,0), 2);
@@ -351,7 +398,7 @@ public:
 			rockData.y =  rect.y ;
 			rockData.width = rect.width ;
 			rockData.height =  rect.height ;
-			//rockData.color = "rainbow" ;
+			rockData.color = rectColor;
 			rocksMsg.rockData.push_back(rockData) ;
 			// -------------------------------------------------------------------
          	}
@@ -435,6 +482,17 @@ public:
         return result;
     }
     return cv::Mat();
+ }
+
+ //std_msgs::ColorRGBA computeROIStats(const cv::Mat& inputImage, const cv::Rect& roi, cv::Scalar& mean, cv::Scalar& sd) 
+ rock_publisher::colorRGBA computeROIStats(const cv::Mat& inputImage, const cv::Rect& roi, cv::Scalar& mean, cv::Scalar& sd) 
+ {
+    cv::Mat roiImg = inputImage(roi);
+    meanStdDev(roiImg, mean,sd);
+    //std_msgs::ColorRGBA c;
+    rock_publisher::colorRGBA c;
+    c.r = mean[0]; c.g = mean[1]; c.b = mean[2]; c.a = 1.0;
+    return c;  
  }
 
 }; 
