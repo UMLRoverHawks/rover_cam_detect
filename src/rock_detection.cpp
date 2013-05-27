@@ -16,6 +16,9 @@
 #include <rock_publisher/imgData.h>
 #include <rock_publisher/imgDataArray.h>
 
+//recalibration message
+#include <rock_publisher/recalibrateMsg.h>
+
 namespace enc = sensor_msgs::image_encodings;
 
 static const char WINDOW[] = "Image window";
@@ -36,6 +39,8 @@ class RockDetection
   // detector parameters
   ros::Subscriber saturation_sub_; // get adjustment from UI slider
   ros::Publisher saturation_pub_; // get adjustment from UI slider
+
+  ros::Subscriber recalibrate_sub_; //get recalibration messages
 
   // Reusable images
   // convert to HSV
@@ -78,6 +83,8 @@ public:
     // parameter pub/sub
     saturation_sub_ = nh_.subscribe("detect_saturation", 1, &RockDetection::saturationCb, this);
     saturation_pub_ = nh_.advertise<std_msgs::Int32>("detect_saturation_info", 1, latch);
+    //Start subscriber to recalibrate topic, which calls the recalibrate function
+    recalibrate_sub_ = nh_.subscribe("recalibrate", 1000, &RockDetection::recalibrateCallback,  this);
   
     // (1) load detection parameters
     // (2) getCalibrations() will load up a vector of scalars of min hsv values,
@@ -493,6 +500,20 @@ public:
     rock_publisher::colorRGBA c;
     c.r = mean[0]; c.g = mean[1]; c.b = mean[2]; c.a = 1.0;
     return c;  
+ }
+
+ void recalibrateCallback(const rock_publisher::recalibrateMsg& msg)
+ {
+     //cv_bridge::CvImagePtr cv_in;
+     cv::Mat currentFrame;
+     cv::Rect box;
+     cv::Scalar mean;
+     cv::Scalar sd;
+     rock_publisher::colorRGBA color;
+     currentFrame = cv::imdecode(cv::Mat(msg.img.data),1);
+     box = cv::Rect(msg.data.x, msg.data.y, msg.data.width, msg.data.height);
+
+     color = computeROIStats(currentFrame, box, mean, sd);
  }
 
 }; 
