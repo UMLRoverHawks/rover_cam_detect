@@ -3,6 +3,7 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/CompressedImage.h>
 #include <std_msgs/ColorRGBA.h> 
 #include <std_msgs/Int32.h> 
 #include <std_msgs/String.h> 
