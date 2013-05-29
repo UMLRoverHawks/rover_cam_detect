@@ -85,7 +85,7 @@ public:
     saturation_pub_ = nh_.advertise<std_msgs::Int32>("detect_saturation_info", 1, latch);
     //Start subscriber to recalibrate topic, which calls the recalibrate function
     recalibrate_sub_ = nh_.subscribe("recalibrate", 1000, &RockDetection::recalibrateCallback,  this);
-  
+    cvNamedWindow(WINDOW);
     // (1) load detection parameters
     // (2) getCalibrations() will load up a vector of scalars of min hsv values,
     // 'mins', a vector of scalars of max hsv values, 'max,' 
