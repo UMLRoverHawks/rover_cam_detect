@@ -558,7 +558,7 @@ public:
 	   return;
         }
 
-	// DEBUG stuff
+	// TEST CASE: simple image 
 /*	ROS_INFO("Bbox dimensions (x/y/w/h): %d %d %d %d", msg.data.x, msg.data.y, msg.data.width, msg.data.height);
      	box = cv::Rect(msg.data.x, msg.data.y, msg.data.width, msg.data.height);
 	
@@ -580,7 +580,6 @@ public:
 
 //	sd = cv::Scalar(10,10,10);
         
-	//cv::Scalar f = cv::Scalar(2,2,2)*sd; // add param for this.	
         sd[0] *= 2; sd[1] *= 2; sd[2] *= 2;
 	cv::Scalar hsvMin = mean - sd; // add param for this.	
 	cv::Scalar hsvMax = mean + sd; 	
@@ -610,8 +609,8 @@ public:
  {
       for(int j=0; j<mins.size(); ++j)
       {
-         vec.erase(mins[j].begin()+1, mins[j].end());
-         vec.erase(maxs[j].begin()+1, maxs[j].end());
+         mins[j].erase(mins[j].begin()+1, mins[j].end());
+         maxs[j].erase(maxs[j].begin()+1, maxs[j].end());
        }
  }
 
