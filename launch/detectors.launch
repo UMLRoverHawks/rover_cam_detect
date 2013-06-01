@@ -1,9 +1,11 @@
 <launch>
 
-  <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera0" >
+  <!-- front camera parameter file -->
+  <include file="$(find rover_cam_detect)/launch/detector_node_front.launch" ns="camera0" >
    <remap from="image" to="image_raw"/>
   </include>
-  <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera1" >
+  <!-- back camera parameter file -->
+  <include file="$(find rover_cam_detect)/launch/detector_node_back.launch" ns="camera1" >
    <remap from="image" to="image_raw"/>
   </include>
   <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera2" >

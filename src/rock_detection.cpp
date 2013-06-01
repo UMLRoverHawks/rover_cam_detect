@@ -47,14 +47,14 @@ class RockDetection
   // convert to HSV
   cv::Mat hsvImg;
   // threshold based upon hue channel
-  cv::Mat coldMask;
-  cv::Mat warmMask;
   cv::Mat mask;
   cv::Mat mask2;
   // saturation masks
   cv::Mat satMask;
   cv::Mat highSatMask;
-
+  // bounding area mask (e.g. only detect things in these areas
+  cv::Mat boundMask;
+ 
   // color calibration:
   // use a vector of vectors as a calibration 'stack' 
   // to accomondate on the fly calibration
@@ -70,6 +70,10 @@ class RockDetection
   int NUM_CALIB_STD_DEVS; 
   int MAX_ROCK_SIZE;
   int MIN_ROCK_SIZE;
+  int UL_X;
+  int UL_Y;
+  int LR_X;
+  int LR_Y;
   double MAX_COMPACT_NUM; // MAX_COMPACT_NUM = 1, for a perfect circle
   std::string PATH_TO_CALIBRATIONS;
   std::string CALIBRATION_FILE;
@@ -77,8 +81,8 @@ class RockDetection
 
 public:
   RockDetection()
-    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(1000), MIN_ROCK_SIZE(100), MAX_COMPACT_NUM(3.0), 
-	NUM_CALIB_STD_DEVS(2.0), SHOW_VIZ(false)
+    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(100), MIN_ROCK_SIZE(20), MAX_COMPACT_NUM(3.0), 
+	NUM_CALIB_STD_DEVS(2.0), UL_X(0), UL_Y(0), LR_X(864), LR_Y(480), SHOW_VIZ(false)
   {
 
     // for visualization
@@ -129,6 +133,7 @@ public:
         nh_.hasParam("rover_cam_detect/minY") && // default = 15 
         nh_.hasParam("rover_cam_detect/maxX") && // default = 15 
         nh_.hasParam("rover_cam_detect/maxY") && // default = 15 
+        nh_.hasParam("rover_cam_detect/showViz") && // default = 15 
         nh_.hasParam("rover_cam_detect/maxCompactNum") && // default = 3.0
         nh_.hasParam("rover_cam_detect/calibPath") && // default = /home/csrobot/.calibrations/
         nh_.hasParam("rover_cam_detect/calibFile") ) // default = /default_calib.yml
@@ -143,15 +148,15 @@ public:
       nh_.getParam("rover_cam_detect/minY", UL_Y);
       nh_.getParam("rover_cam_detect/maxX", LR_X); 
       nh_.getParam("rover_cam_detect/maxY", LR_Y);
+      nh_.getParam("rover_cam_detect/showViz", SHOW_VIZ);
 
       ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
       ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
       ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
-      ROS_INFO("minX: %d", UL_X);
-      ROS_INFO("minY: %d", UL_Y);
-      ROS_INFO("maxX: %d", LR_X);
-      ROS_INFO("maxY: %d", LR_Y);
- /*     ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
+      ROS_INFO("minX: %d minY: %d maxX: %d maxY: %d", UL_X, UL_Y, LR_X, LR_Y);
+      ROS_INFO("visualization turned on : %d\n", SHOW_VIZ);
+ 
+/*     ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
       ROS_INFO("calibration file: %s\n", CALIBRATION_FILE.c_str());
 */
       ROS_INFO("Rock detections parameters loaded!");
@@ -275,11 +280,30 @@ public:
    // }
   }
 
-  cv::Mat createBoundAreaMask(const cv::Mat &origImg, const int mixX, const int minY, 
+  cv::Mat createBoundAreaMask(const cv::Mat &origImg, const int minX, const int minY, 
 				const int  maxX, const int maxY)
   {
     cv::Mat mask =  cv::Mat::zeros(origImg.size(), CV_8U);
 
+    // If dimensions are bad, return a mask of one (e.g. no bounding area)   
+    if( minX < 0  && minY < 0 && maxX > origImg.size().width && maxX > origImg.size().height)
+    {
+	ROS_INFO("Returning full detection area mask.");
+	return cv::Mat::ones(origImg.size(), CV_8U); 
+    }
+
+    for(int i=minY; i<maxY; ++i)
+    {
+    	for(int j=minX; j<maxX; ++j)
+	{
+		mask.at<uchar>(i, j) = 255;
+	}
+    }
+	
+    //cv::imshow("bound mask", mask);
+    //cv::waitKey(3);
+
+    ROS_INFO("Returning some detection area mask.");
     return mask;
   }
 
@@ -299,11 +323,23 @@ public:
     // do image processing here
     // OpenCV Mat image is cv_ptr->image
 
+    // initialize bounding area mask
+    static bool initBoundMask = false;
+    if(!initBoundMask)
+    {
+	ROS_INFO("Created bounding area mask!");
+    	boundMask = createBoundAreaMask(cv_ptr->image, UL_X, UL_Y, LR_X, LR_Y);
+    	//boundMask = createBoundAreaMask(cv_ptr->image, UL_X, UL_Y, 20, 60);
+	initBoundMask = true;
+    }
+
+ 
     // --------- start color processing ------------ // 
     
     // reduce image size (faster processing, less detail) and apply Gauss blur
     //pyrMeanShiftFiltering(cv_ptr->image, hsvImg, 5, 15);
     //cv::pyrDown(hsvImg, hsvImg);
+
     cv::pyrDown(cv_ptr->image, hsvImg);
     hsvImg = equalizeIntensity(hsvImg.clone());
 
@@ -344,13 +380,14 @@ public:
 	// Use hue only
     	//inRange(hsv[0], hMin+0.10*hDiff, hMax+0.1*hDiff, hueMask);
     	//inRange(hsv[0], hMin-0.10*hDiff, hMax-0.1*hDiff, hueMask);
-    	inRange(hsv[0], hMin, hMax, hueMask);
+    	//inRange(hsv[0], hMin, hMax, hueMask);
 	// hue and saturation threshs - kinda sucks
-    	//inRange(hsv[0], hMin, hMax, mask);
+    	inRange(hsv[0], hMin, hMax, mask);
     	//inRange(hsv[1], sMin, sMax, mask2);
         //mask &= mask2;
         // merge current color mask with others
-        //hueMask |= mask; 
+        hueMask |= mask; 
+	
     }
     
     // Threshold using a minimum saturation level. Low saturation
@@ -358,7 +395,10 @@ public:
     inRange(hsv[1], minSaturation_, 255,satMask); 
     // AND mask with saturation channel
     hueMask &= satMask;  
-   
+  
+    // mask out areas with bounding area mask (e.g areas of the image we want to detect on)
+    //hueMask &= boundMask;
+ 
     //cv::imshow("hue mask", hueMask);
 
     // apply morphological operations to get rid of noise
@@ -576,9 +616,9 @@ public:
         }
 
 	// TEST CASE: simple image 
-/*	ROS_INFO("Bbox dimensions (x/y/w/h): %d %d %d %d", msg.data.x, msg.data.y, msg.data.width, msg.data.height);
+	ROS_INFO("Bbox dimensions (x/y/w/h): %d %d %d %d", msg.data.x, msg.data.y, msg.data.width, msg.data.height);
      	box = cv::Rect(msg.data.x, msg.data.y, msg.data.width, msg.data.height);
-	
+/*	
 	std::vector<cv::Mat> rgb;
 	cv::Mat rg =  cv::Mat::zeros(200, 200, CV_8U);
 	cv::Mat bl =  255 * cv::Mat::ones(200, 200, CV_8U);
@@ -588,10 +628,12 @@ public:
 	rgb.push_back(bl/2);	
 	merge(rgb, currentFrame);
      	cv::imwrite("/home/csrobot/blue.jpg", currentFrame);
-		
-	cv::imshow("test image", currentFrame);
-        cv::waitKey(1);	
-*/
+*/		
+     	//cv::imwrite("/home/csrobot/recal_img.jpg", currentFrame);
+        //ROS_INFO("saved recal image");
+//	cv::imshow("test image", currentFrame);
+ //       cv::waitKey(1);	
+
 	// get HSV color status.     
         color = computeROIStats(currentFrame, box, mean, sd, needHSV);
 
