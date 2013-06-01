@@ -94,6 +94,7 @@ public:
     saturation_pub_ = nh_.advertise<std_msgs::Int32>("detect_saturation_info", 1, latch);
     //Start subscriber to recalibrate topic, which calls the recalibrate function
     recalibrate_sub_ = nh_.subscribe("recalibrate", 1000, &RockDetection::recalibrateCallback,  this);
+  
     // (1) load detection parameters
     // (2) getCalibrations() will load up a vector of scalars of min hsv values,
     // 'mins', a vector of scalars of max hsv values, 'max,' 
@@ -130,15 +131,14 @@ public:
         nh_.hasParam("rover_cam_detect/calibFile") ) // default = /sunny.yml
     {
 
-      nh_.getParam("rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
       nh_.getParam("rover_cam_detect/minRockSize", MIN_ROCK_SIZE);
       nh_.getParam("rover_cam_detect/maxCompactNum", MAX_COMPACT_NUM);
       nh_.getParam("rover_cam_detect/calibPath", PATH_TO_CALIBRATIONS);
       nh_.getParam("rover_cam_detect/calibFile", CALIBRATION_FILE);
       ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
       ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
-      ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
- /*     ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
+/*    ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
+      ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
       ROS_INFO("calibration file: %s\n", CALIBRATION_FILE.c_str());
 */
       ROS_INFO("Rock detections parameters loaded!");
@@ -275,6 +275,8 @@ public:
       return;
     }
 
+     cv::imshow("detections!", cv_ptr->image);
+
     // do image processing here
     // OpenCV Mat image is cv_ptr->image
 
@@ -325,17 +327,15 @@ public:
 	int sDiff = sMax-sMin;
 	int vMin = hsvMin[2];
 	int vMax = hsvMax[2];
-
-	// Use hue only
     	//inRange(hsv[0], hMin+0.10*hDiff, hMax+0.1*hDiff, hueMask);
     	//inRange(hsv[0], hMin-0.10*hDiff, hMax-0.1*hDiff, hueMask);
-    	inRange(hsv[0], hMin, hMax, hueMask);
-	// hue and saturation threshs - kinda sucks
-    	//inRange(hsv[0], hMin, hMax, mask);
+    	inRange(hsv[0], hMin, hMax, mask);
     	//inRange(hsv[1], sMin, sMax, mask2);
         //mask &= mask2;
         // merge current color mask with others
-        //hueMask |= mask; 
+        hueMask |= mask; 
+
+//	ROS_INFO("%d", hMin);		
     }
     
     // Threshold using a minimum saturation level. Low saturation
@@ -348,12 +348,10 @@ public:
 
     // apply morphological operations to get rid of noise
     static int dilationElem = cv::MORPH_RECT; // create me once!
-    //static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(5,5)); // create me once!
-    static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(3,3)); // create me once!
+    static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(5,5)); // create me once!
 
     // erode image to get rid of small noisy pixels in background
     erode(hueMask, mask, structureElem);
-    //dilate(mask, mask, structureElem);
      
     // --------- start shape detection processing ------------ // 
     // use findContours to filter and blob detected rocks
@@ -452,9 +450,9 @@ public:
     	cv::imshow("sat mask", satMask);
     	cv::imshow("hue mask", hueMask);
     	cv::imshow("mask rgb", rgbImg);
-    	//cv::imshow("hue", hsv[0]);
+    	cv::imshow("hue", hsv[0]);
     	cv::imshow("saturation", hsv[1]);
-    	//cv::imshow("value - lightness", hsv[2]);
+    	cv::imshow("value - lightness", hsv[2]);
     	cv::imshow("detections!", cv_ptr->image);
 	cv::waitKey(1);
     }
@@ -560,7 +558,7 @@ public:
 	   return;
         }
 
-	// TEST CASE: simple image 
+	// DEBUG stuff
 /*	ROS_INFO("Bbox dimensions (x/y/w/h): %d %d %d %d", msg.data.x, msg.data.y, msg.data.width, msg.data.height);
      	box = cv::Rect(msg.data.x, msg.data.y, msg.data.width, msg.data.height);
 	
@@ -582,6 +580,7 @@ public:
 
 //	sd = cv::Scalar(10,10,10);
         
+	//cv::Scalar f = cv::Scalar(2,2,2)*sd; // add param for this.	
         sd[0] *= 2; sd[1] *= 2; sd[2] *= 2;
 	cv::Scalar hsvMin = mean - sd; // add param for this.	
 	cv::Scalar hsvMax = mean + sd; 	
@@ -611,8 +610,8 @@ public:
  {
       for(int j=0; j<mins.size(); ++j)
       {
-         mins[j].erase(mins[j].begin()+1, mins[j].end());
-         maxs[j].erase(maxs[j].begin()+1, maxs[j].end());
+         vec.erase(mins[j].begin()+1, mins[j].end());
+         vec.erase(maxs[j].begin()+1, maxs[j].end());
        }
  }
 

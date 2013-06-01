@@ -17,18 +17,15 @@
 #include <rock_publisher/imgData.h>
 #include <rock_publisher/imgDataArray.h>
 
-//recalibration message
-#include <rock_publisher/recalibrateMsg.h>
-
 namespace enc = sensor_msgs::image_encodings;
 
 static const char WINDOW[] = "Image window";
 
 // Enumerate different rock colors (subject to change
 // based upon UI input)
-// b =0, g = 1, r = 2, o = 3, p = 4, y = 5
-enum colors_ { blue_ = 0, green_, red_,
-               orange_, purple_, yellow_, numColors_ };
+enum colors_ { green_ = 0, purple_, blue_,
+               yellow_, orange_, red1_, red2_, numColors_ };
+
 
 class RockDetection
 {
@@ -40,8 +37,6 @@ class RockDetection
   // detector parameters
   ros::Subscriber saturation_sub_; // get adjustment from UI slider
   ros::Publisher saturation_pub_; // get adjustment from UI slider
-
-  ros::Subscriber recalibrate_sub_; //get recalibration messages
 
   // Reusable images
   // convert to HSV
@@ -65,9 +60,6 @@ class RockDetection
 
   // config parameters 
   int minSaturation_;
-  // range of calibration thresholds - based upon mean +- #(std devs) 
-  // from ROI rock patch
-  int NUM_CALIB_STD_DEVS; 
   int MAX_ROCK_SIZE;
   int MIN_ROCK_SIZE;
   double MAX_COMPACT_NUM; // MAX_COMPACT_NUM = 1, for a perfect circle
@@ -77,23 +69,19 @@ class RockDetection
 
 public:
   RockDetection()
-    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(1000), MIN_ROCK_SIZE(100), MAX_COMPACT_NUM(3.0), 
-	NUM_CALIB_STD_DEVS(2.0), SHOW_VIZ(false)
+    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(1000), MIN_ROCK_SIZE(100), MAX_COMPACT_NUM(3.0), SHOW_VIZ(false)
   {
-
-    // for visualization
-    if(SHOW_VIZ) 
-     cvNamedWindow(WINDOW);
- 
+  
     bool latch = true; 
     image_pub_ = it_.advertise("image_detect", 1);
     image_sub_ = it_.subscribe("image", 1, &RockDetection::imageCb, this);
+  //  image_sub_ = it_.subscribe("image_raw", 1, &RockDetection::imageCompCb, this, image_transport::TransportHints("compressed"));
+    //image_sub_ = it_.subscribe("image_raw/compressed", 1, &RockDetection::imageCompCb, this );
     detect_pub_ = nh_.advertise<rock_publisher::imgDataArray>( "detects", 1000 ) ;
     // parameter pub/sub
     saturation_sub_ = nh_.subscribe("detect_saturation", 1, &RockDetection::saturationCb, this);
     saturation_pub_ = nh_.advertise<std_msgs::Int32>("detect_saturation_info", 1, latch);
-    //Start subscriber to recalibrate topic, which calls the recalibrate function
-    recalibrate_sub_ = nh_.subscribe("recalibrate", 1000, &RockDetection::recalibrateCallback,  this);
+  
     // (1) load detection parameters
     // (2) getCalibrations() will load up a vector of scalars of min hsv values,
     // 'mins', a vector of scalars of max hsv values, 'max,' 
@@ -120,7 +108,33 @@ public:
   {
     cv::destroyWindow(WINDOW);
   }
+/*
+  void imageCompCb(const sensor_msgs::ImageConstPtr& msg)
+  {
+     
+   // cv::Mat matrix = cv::imdecode(cv::Mat(msg->data),1);
+    //std::string encode(msg->encoding);
+    ROS_INFO("got it:");//, encode.c_str());
+ 
+    //cv::imshow("mtx", matrix);   
+  
+    cv_bridge::CvImagePtr cv_ptr;
+    try
+    {
+      cv_ptr = cv_bridge::toCvCopy(msg, enc::BGR8);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+      ROS_ERROR("cv_bridge exception: %s", e.what());
+      return;
+    }
 
+    std::cout <<   cv_ptr->image << std::endl; 
+    cv::imshow("mtx", cv_ptr->image);
+    ROS_INFO("i win jpeg");    
+
+ }
+*/
   bool getDetectionParams()
   {
     if (nh_.hasParam("rover_cam_detect/maxRockSize") && // default = 1300
@@ -130,15 +144,14 @@ public:
         nh_.hasParam("rover_cam_detect/calibFile") ) // default = /sunny.yml
     {
 
-      nh_.getParam("rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
       nh_.getParam("rover_cam_detect/minRockSize", MIN_ROCK_SIZE);
       nh_.getParam("rover_cam_detect/maxCompactNum", MAX_COMPACT_NUM);
       nh_.getParam("rover_cam_detect/calibPath", PATH_TO_CALIBRATIONS);
       nh_.getParam("rover_cam_detect/calibFile", CALIBRATION_FILE);
       ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
       ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
-      ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
- /*     ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
+/*    ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
+      ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
       ROS_INFO("calibration file: %s\n", CALIBRATION_FILE.c_str());
 */
       ROS_INFO("Rock detections parameters loaded!");
@@ -195,7 +208,6 @@ public:
       std::vector<cv::Scalar> vec(1,cv::Scalar(-1,-1,-1));
   
       // add vectors (containing thresholds) for each color 
-      // this vector correspons exactly to enumerated colors above
       for(unsigned i = 0; i<numColors_; ++i)
       { 
  	mins.push_back(vec);
@@ -215,15 +227,15 @@ public:
       cal["colors"][i]["mins"]["h"] >> h;
       cal["colors"][i]["mins"]["s"] >> s;
       cal["colors"][i]["mins"]["v"] >> v;
-      mins[i][0] = cv::Scalar(h, s, v); // use vec of vecs
-      //mins[i].push_back(cv::Scalar(h, s, v)); // use vec of vecs
+      mins[i].push_back(cv::Scalar(h, s, v)); // use vec of vecs
+      //mins.push_back(cv::Scalar(h, s, v));
       ROS_INFO("min hsv : %d %d %d", h, s, v);
 
       cal["colors"][i]["maxs"]["h"] >> h;
       cal["colors"][i]["maxs"]["s"] >> s;
       cal["colors"][i]["maxs"]["v"] >> v;
-      maxs[i][0] = cv::Scalar(h, s, v); // use vec of vecs
-      //maxs[i].push_back(cv::Scalar(h, s, v));
+      maxs[i].push_back(cv::Scalar(h, s, v));
+      //maxs.push_back(cv::Scalar(h, s, v));
       ROS_INFO("max hsv : %d %d %d", h, s, v);
     }
 
@@ -325,17 +337,15 @@ public:
 	int sDiff = sMax-sMin;
 	int vMin = hsvMin[2];
 	int vMax = hsvMax[2];
-
-	// Use hue only
     	//inRange(hsv[0], hMin+0.10*hDiff, hMax+0.1*hDiff, hueMask);
     	//inRange(hsv[0], hMin-0.10*hDiff, hMax-0.1*hDiff, hueMask);
-    	inRange(hsv[0], hMin, hMax, hueMask);
-	// hue and saturation threshs - kinda sucks
-    	//inRange(hsv[0], hMin, hMax, mask);
+    	inRange(hsv[0], hMin, hMax, mask);
     	//inRange(hsv[1], sMin, sMax, mask2);
         //mask &= mask2;
         // merge current color mask with others
-        //hueMask |= mask; 
+        hueMask |= mask; 
+
+//	ROS_INFO("%d", hMin);		
     }
     
     // Threshold using a minimum saturation level. Low saturation
@@ -348,12 +358,10 @@ public:
 
     // apply morphological operations to get rid of noise
     static int dilationElem = cv::MORPH_RECT; // create me once!
-    //static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(5,5)); // create me once!
-    static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(3,3)); // create me once!
+    static cv::Mat structureElem = getStructuringElement(dilationElem, cv::Size(5,5)); // create me once!
 
     // erode image to get rid of small noisy pixels in background
     erode(hueMask, mask, structureElem);
-    //dilate(mask, mask, structureElem);
      
     // --------- start shape detection processing ------------ // 
     // use findContours to filter and blob detected rocks
@@ -395,7 +403,7 @@ public:
 	 //cv::Scalar mn = 0, stdev = 0;
 	 //meanStdDev(roi, mn, stdev);
 		
-	 if( area < MAX_ROCK_SIZE && area > MIN_ROCK_SIZE )
+	 if( area < MAX_ROCK_SIZE/2 && area > MIN_ROCK_SIZE/2 )
 	 {	
 		//printf("contour %d: a = %f l = %f [compact = %f]\n", i, area, length, compactness);
 		//printf("contour %d: mn = %f stdev = %f\n",i, mn.val[0], stdev.val[0]);
@@ -452,11 +460,10 @@ public:
     	cv::imshow("sat mask", satMask);
     	cv::imshow("hue mask", hueMask);
     	cv::imshow("mask rgb", rgbImg);
-    	//cv::imshow("hue", hsv[0]);
+    	cv::imshow("hue", hsv[0]);
     	cv::imshow("saturation", hsv[1]);
-    	//cv::imshow("value - lightness", hsv[2]);
+    	cv::imshow("value - lightness", hsv[2]);
     	cv::imshow("detections!", cv_ptr->image);
-	cv::waitKey(1);
     }
 
     // publish detection image (with bounding boxes)   
@@ -507,129 +514,16 @@ public:
  }
 
  //std_msgs::ColorRGBA computeROIStats(const cv::Mat& inputImage, const cv::Rect& roi, cv::Scalar& mean, cv::Scalar& sd) 
- rock_publisher::colorRGBA computeROIStats(const cv::Mat& inputImage, const cv::Rect& roi, cv::Scalar& mean, cv::Scalar& sd, bool needHSV = false) 
+ rock_publisher::colorRGBA computeROIStats(const cv::Mat& inputImage, const cv::Rect& roi, cv::Scalar& mean, cv::Scalar& sd) 
  {
     cv::Mat roiImg = inputImage(roi);
-
-    // do this if we need to convert to HSV
-    if(needHSV)
-    {
-	cvtColor(roiImg, roiImg, CV_BGR2HSV,  CV_8U);
-    }
-	
     meanStdDev(roiImg, mean,sd);
     //std_msgs::ColorRGBA c;
     rock_publisher::colorRGBA c;
     c.r = mean[0]; c.g = mean[1]; c.b = mean[2]; c.a = 1.0;
-
     return c;  
  }
 
- void recalibrateCallback(const rock_publisher::recalibrateMsg& msg)
- {
-     ROS_INFO("got recalibration msg"); 
-     cv::Mat currentFrame;
-     cv::Rect box;
-     cv::Scalar mean;
-     cv::Scalar sd;
-     rock_publisher::colorRGBA color;
-     // recalibrate color index is stored in color field cuz we are clever
-     // eg. for color index 1, r = g = b= 1
-     int colorToRecalibrate = msg.data.color.r;
-
-     if( colorToRecalibrate == -1)
-     {
-	// reset total calibration
-     	ROS_INFO("Reverting to default calibration. bye!"); 
-	printCalibrationValues();
-        restoreDefaultCalib();
-	printCalibrationValues();
-     } 
-     else if( colorToRecalibrate < numColors_)
-     {
-	// need to convert ROI image to HSV before computing status.
-	bool needHSV = true;
-    	// do this 
-
-     	try {
-       	   currentFrame = cv::imdecode(cv::Mat(msg.img.data),1);
-        }
-        catch(cv::Exception& e)
-        {
-           ROS_ERROR("Couldn't decode compressed calibration image.\n %s", e.what());
-	   return;
-        }
-
-	// TEST CASE: simple image 
-/*	ROS_INFO("Bbox dimensions (x/y/w/h): %d %d %d %d", msg.data.x, msg.data.y, msg.data.width, msg.data.height);
-     	box = cv::Rect(msg.data.x, msg.data.y, msg.data.width, msg.data.height);
-	
-	std::vector<cv::Mat> rgb;
-	cv::Mat rg =  cv::Mat::zeros(200, 200, CV_8U);
-	cv::Mat bl =  255 * cv::Mat::ones(200, 200, CV_8U);
-	rgb.push_back(bl);		
-	rgb.push_back(rg);	
-	//rgb.push_back(rg);	
-	rgb.push_back(bl/2);	
-	merge(rgb, currentFrame);
-     	cv::imwrite("/home/csrobot/blue.jpg", currentFrame);
-		
-	cv::imshow("test image", currentFrame);
-        cv::waitKey(1);	
-*/
-	// get HSV color status.     
-        color = computeROIStats(currentFrame, box, mean, sd, needHSV);
-
-//	sd = cv::Scalar(10,10,10);
-        
-        sd[0] *= 2; sd[1] *= 2; sd[2] *= 2;
-	cv::Scalar hsvMin = mean - sd; // add param for this.	
-	cv::Scalar hsvMax = mean + sd; 	
-	
-	ROS_INFO("Changed color %d HSV thresholds:", colorToRecalibrate);
-	ROS_INFO("H mean = %f H stdev = %f", mean[0], sd[0]);
-	ROS_INFO("NEW: hsvMin = %f %f %f hsvMax = %f %f %f", hsvMin[0], hsvMin[1], hsvMin[2],  hsvMax[0], hsvMax[1], hsvMax[2]);
-	
-        // add calibration to thresholds vectors
-	// before update 
-	printCalibrationValues();
-
-	mins[colorToRecalibrate].push_back(hsvMin);
-	maxs[colorToRecalibrate].push_back(hsvMax);
-
-	// after update 
-	printCalibrationValues();
-
-     }
-     else
-     {
-     	ROS_ERROR("Got invalid recalibration color."); 
-     }
- }
-
- void restoreDefaultCalib()
- {
-      for(int j=0; j<mins.size(); ++j)
-      {
-         mins[j].erase(mins[j].begin()+1, mins[j].end());
-         maxs[j].erase(maxs[j].begin()+1, maxs[j].end());
-       }
- }
-
- void printCalibrationValues()
- {
-       ROS_INFO("----HSV Calibration Threshs ---");
-        
-       for(int j=0; j<mins.size(); ++j)
-       {
-          std::vector<cv::Scalar> vec =  mins[j];
-          cv::Scalar num = vec.back(); // top of calibration value stack
-          ROS_INFO("index %d: min hsv : %f %f %f", j, num[0], num[1], num[2]);
-          vec =  maxs[j];
-          num = vec.back(); // top of calibration stack
-          ROS_INFO("index %d: max hsv : %f %f %f", j, num[0], num[1], num[2]);
-       }
-}
 }; 
 
 int main(int argc, char** argv)

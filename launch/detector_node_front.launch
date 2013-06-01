@@ -3,9 +3,11 @@
   <node name="rover_cam_detect" pkg="rover_cam_detect" type="rover_cam_detect" output="screen" >
    	<remap from="image" to="image_raw"/>
   	<param name="calibPath" value="/home/csrobot/.calibrations/" />
-  	<param name="calibFile" value="default_calib.yml" />
+  	<param name="calibFile" value="sunny.yml" />
+  	<!--param name="calibFile" value="default_calib.yml" /-->
   	<param name="maxRockSize" value="100" />
-  	<param name="minRockSize" value="15" />
+  	<param name="minRockSize" value="5" />
+  	<!--param name="maxCompactNum" value="3.5" /-->
   	<param name="maxCompactNum" value="3.0" />
   </node>
 </launch>
