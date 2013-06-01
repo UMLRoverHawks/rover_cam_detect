@@ -123,11 +123,15 @@ public:
 
   bool getDetectionParams()
   {
-    if (nh_.hasParam("rover_cam_detect/maxRockSize") && // default = 1300
-        nh_.hasParam("rover_cam_detect/minRockSize") && // default = 100
-        nh_.hasParam("rover_cam_detect/maxCompactNum") && // default = 3.5
+    if (nh_.hasParam("rover_cam_detect/maxRockSize") && // default = 100
+        nh_.hasParam("rover_cam_detect/minRockSize") && // default = 15 
+        nh_.hasParam("rover_cam_detect/minX") && // default = 15 
+        nh_.hasParam("rover_cam_detect/minY") && // default = 15 
+        nh_.hasParam("rover_cam_detect/maxX") && // default = 15 
+        nh_.hasParam("rover_cam_detect/maxY") && // default = 15 
+        nh_.hasParam("rover_cam_detect/maxCompactNum") && // default = 3.0
         nh_.hasParam("rover_cam_detect/calibPath") && // default = /home/csrobot/.calibrations/
-        nh_.hasParam("rover_cam_detect/calibFile") ) // default = /sunny.yml
+        nh_.hasParam("rover_cam_detect/calibFile") ) // default = /default_calib.yml
     {
 
       nh_.getParam("rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
@@ -135,9 +139,18 @@ public:
       nh_.getParam("rover_cam_detect/maxCompactNum", MAX_COMPACT_NUM);
       nh_.getParam("rover_cam_detect/calibPath", PATH_TO_CALIBRATIONS);
       nh_.getParam("rover_cam_detect/calibFile", CALIBRATION_FILE);
+      nh_.getParam("rover_cam_detect/minX", UL_X );
+      nh_.getParam("rover_cam_detect/minY", UL_Y);
+      nh_.getParam("rover_cam_detect/maxX", LR_X); 
+      nh_.getParam("rover_cam_detect/maxY", LR_Y);
+
       ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
       ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
       ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
+      ROS_INFO("minX: %d", UL_X);
+      ROS_INFO("minY: %d", UL_Y);
+      ROS_INFO("maxX: %d", LR_X);
+      ROS_INFO("maxY: %d", LR_Y);
  /*     ROS_INFO("calibration file directory: %s\n", PATH_TO_CALIBRATIONS.c_str());
       ROS_INFO("calibration file: %s\n", CALIBRATION_FILE.c_str());
 */
@@ -262,6 +275,14 @@ public:
    // }
   }
 
+  cv::Mat createBoundAreaMask(const cv::Mat &origImg, const int mixX, const int minY, 
+				const int  maxX, const int maxY)
+  {
+    cv::Mat mask =  cv::Mat::zeros(origImg.size(), CV_8U);
+
+    return mask;
+  }
+
   void imageCb(const sensor_msgs::ImageConstPtr& msg)
   {
     cv_bridge::CvImagePtr cv_ptr;
@@ -297,14 +318,8 @@ public:
     // threshold based upon hue channel
     // define colors as ranges or with a color radius
     // H: 0 - 180, S: 0 - 255 
-/*  Defines contents of default_calib.yml file   
-    int radius = 15; 
-    static const int green = 60;
-    static const int purple = 135;
-    static const int lightBlue = 100;
-    static const int yellow = 30;
-    static const int orange = 15 ;
- */   
+    // approx mean hue:  green = 60 purple = 135 lightBlue = 100 yellow = 30  orange = 15 
+   
     // Apply thresholds from calibration
     // mins / maxs
     cv::Mat hueMask =  cv::Mat::zeros(hsv[0].rows, hsv[0].cols, CV_8U);
