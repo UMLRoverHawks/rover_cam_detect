@@ -1,5 +1,4 @@
 #include <ros/ros.h>
-
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
@@ -283,23 +282,24 @@ public:
   cv::Mat createBoundAreaMask(const cv::Mat &origImg, const int minX, const int minY, 
 				const int  maxX, const int maxY)
   {
-    cv::Mat mask =  cv::Mat::zeros(origImg.size(), CV_8U);
+    // bounding/detection area mask is scaled by 1/2 b.c. img  processing done at half scale
+    cv::Mat mask =  cv::Mat::zeros((origImg.size().height)/2, (origImg.size().width)/2, CV_8U);
 
     // If dimensions are bad, return a mask of one (e.g. no bounding area)   
     if( minX < 0  && minY < 0 && maxX > origImg.size().width && maxX > origImg.size().height)
     {
 	ROS_INFO("Returning full detection area mask.");
-	return cv::Mat::ones(origImg.size(), CV_8U); 
+	return cv::Mat::ones((origImg.size().height)/2, (origImg.size().width)/2, CV_8U); 
     }
 
-    for(int i=minY; i<maxY; ++i)
+    for(int i=minY/2; i<maxY/2; ++i)
     {
-    	for(int j=minX; j<maxX; ++j)
+    	for(int j=minX/2; j<maxX/2; ++j)
 	{
 		mask.at<uchar>(i, j) = 255;
 	}
     }
-	
+
     //cv::imshow("bound mask", mask);
     //cv::waitKey(3);
 
@@ -329,7 +329,6 @@ public:
     {
 	ROS_INFO("Created bounding area mask!");
     	boundMask = createBoundAreaMask(cv_ptr->image, UL_X, UL_Y, LR_X, LR_Y);
-    	//boundMask = createBoundAreaMask(cv_ptr->image, UL_X, UL_Y, 20, 60);
 	initBoundMask = true;
     }
 
@@ -397,9 +396,7 @@ public:
     hueMask &= satMask;  
   
     // mask out areas with bounding area mask (e.g areas of the image we want to detect on)
-    //hueMask &= boundMask;
- 
-    //cv::imshow("hue mask", hueMask);
+    hueMask &= boundMask;
 
     // apply morphological operations to get rid of noise
     static int dilationElem = cv::MORPH_RECT; // create me once!
@@ -408,7 +405,9 @@ public:
 
     // erode image to get rid of small noisy pixels in background
     erode(hueMask, mask, structureElem);
-    //dilate(mask, mask, structureElem);
+    erode(mask, mask, structureElem);
+    // dilate to emphasize detections
+    dilate(mask, mask, structureElem);
      
     // --------- start shape detection processing ------------ // 
     // use findContours to filter and blob detected rocks
@@ -504,19 +503,21 @@ public:
     	pyrUp(rgbImg, rgbImg);
 
     	//cv::imshow("mask", mask);
-    	cv::imshow("sat mask", satMask);
-    	cv::imshow("hue mask", hueMask);
-    	cv::imshow("mask rgb", rgbImg);
+    //	cv::imshow("sat mask", satMask);
+    //	cv::imshow("hue mask", hueMask);
+    //	cv::imshow("mask rgb", rgbImg);
     	//cv::imshow("hue", hsv[0]);
-    	cv::imshow("saturation", hsv[1]);
+   // 	cv::imshow("saturation", hsv[1]);
     	//cv::imshow("value - lightness", hsv[2]);
-    	cv::imshow("detections!", cv_ptr->image);
-	cv::waitKey(1);
+   // 	cv::imshow("detections!", cv_ptr->image);
+//	cv::waitKey(1);
+    //	cv_ptr->image = rgbImg.clone();
+    //	image_pub_.publish(cv_ptr->toImageMsg());
     }
 
     // publish detection image (with bounding boxes)   
     image_pub_.publish(cv_ptr->toImageMsg());
-
+    
     // publish detections
     if(!rocksMsg.rockData.empty())
     {
