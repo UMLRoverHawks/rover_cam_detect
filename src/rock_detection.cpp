@@ -77,11 +77,13 @@ class RockDetection
   std::string PATH_TO_CALIBRATIONS;
   std::string CALIBRATION_FILE;
   bool SHOW_VIZ; // show debug visualizations
+  // 
+  int numColorThreshs_;
 
 public:
   RockDetection()
-    : it_(nh_), minSaturation_(50), MAX_ROCK_SIZE(100), MIN_ROCK_SIZE(20), MAX_COMPACT_NUM(3.0), 
-	NUM_CALIB_STD_DEVS(2.0), UL_X(0), UL_Y(0), LR_X(864), LR_Y(480), SHOW_VIZ(false)
+    : it_(nh_), minSaturation_(60), MAX_ROCK_SIZE(100), MIN_ROCK_SIZE(20), MAX_COMPACT_NUM(3.0), 
+	NUM_CALIB_STD_DEVS(2.0), UL_X(0), UL_Y(0), LR_X(640), LR_Y(360), SHOW_VIZ(false)
   {
 
     // for visualization
@@ -116,7 +118,8 @@ public:
       nh_.shutdown();
       return;
     }
- 
+
+    ROS_INFO("Done with initialization"); 
   }
 
   ~RockDetection()
@@ -213,7 +216,9 @@ public:
   
       // add vectors (containing thresholds) for each color 
       // this vector correspons exactly to enumerated colors above
-      for(unsigned i = 0; i<numColors_; ++i)
+      static int max_num_colors_calib = 12;
+      for(unsigned i = 0; i<max_num_colors_calib; ++i)
+      //for(unsigned i = 0; i<numColors_; ++i)
       { 
  	mins.push_back(vec);
 	maxs.push_back(vec);
@@ -244,6 +249,7 @@ public:
       ROS_INFO("max hsv : %d %d %d", h, s, v);
     }
 
+    numColorThreshs_ = maxs.size();
     ROS_INFO("Done loading yaml calibration file.");
   }
 
@@ -359,7 +365,8 @@ public:
     // mins / maxs
     cv::Mat hueMask =  cv::Mat::zeros(hsv[0].rows, hsv[0].cols, CV_8U);
     
-    for(int j=0; j<numColors_; ++j) // use pre-decided set of colors size
+    for(int j=0; j<numColorThreshs_; ++j) // use pre-decided set of colors size
+    //for(int j=0; j<numColors_; ++j) // use pre-decided set of colors size
     {
 	// skip if no calibration provided for this color (init'd to -1) 
 	if( ( mins[j].back() )[0] == -1 )
@@ -408,6 +415,7 @@ public:
     erode(mask, mask, structureElem);
     // dilate to emphasize detections
     dilate(mask, mask, structureElem);
+    dilate(mask, mask, structureElem);
      
     // --------- start shape detection processing ------------ // 
     // use findContours to filter and blob detected rocks
@@ -441,6 +449,7 @@ public:
 	 // a contour is an array points
 	 length = arcLength(contours[i], true);
 	 area = contourArea(contours[i]);
+	 // this is inverted but leave it for now.
 	 compactness = (length*length) / (4 * 3.14159 * area);
 	 // calculate entropy on detection ROI (look for areas with low entropy)
 	 // (not being used at the moment)
@@ -480,7 +489,6 @@ public:
 	 }
     }
 
-
    // Algorithm visualization
    if(SHOW_VIZ) 
     {
@@ -505,12 +513,14 @@ public:
     	//cv::imshow("mask", mask);
     //	cv::imshow("sat mask", satMask);
     //	cv::imshow("hue mask", hueMask);
-    //	cv::imshow("mask rgb", rgbImg);
+    	cv::imshow("mask rgb", rgbImg);
     	//cv::imshow("hue", hsv[0]);
    // 	cv::imshow("saturation", hsv[1]);
     	//cv::imshow("value - lightness", hsv[2]);
-   // 	cv::imshow("detections!", cv_ptr->image);
-//	cv::waitKey(1);
+    	cv::imshow("detections!", cv_ptr->image);
+	cv::waitKey(1);
+
+ 	// publish detection mask for debugging
     //	cv_ptr->image = rgbImg.clone();
     //	image_pub_.publish(cv_ptr->toImageMsg());
     }

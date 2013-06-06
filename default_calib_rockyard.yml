@@ -1,0 +1,82 @@
+%YAML:1.0
+colors:
+   -
+      color: BLUE
+      mins:
+         h: 72
+         s: 51
+         v: 252
+      maxs:
+         h: 124
+         s: 255
+         v: 255
+   -
+      color: GREEN
+      mins:
+         h: 36
+         s: 150
+         v: 138
+      maxs:
+         h: 116
+         s: 255
+         v: 255
+   -
+      color: ORANGE
+      mins:
+         h: 0
+         s: 87
+         v: 187
+      maxs:
+         h: 239
+         s: 255
+         v: 255
+   -
+      color: ORANGE
+      mins:
+         h: 90
+         s: 87
+         v: 187
+      maxs:
+         h: 179
+         s: 255
+         v: 255
+   -
+      color: PURPLE
+      mins:
+         h: 98
+         s: 84
+         v: 168
+      maxs:
+         h: 162
+         s: 255
+         v: 255
+   -
+      color: RED
+      mins:
+         h: 0
+         s: 63
+         v: 195
+      maxs:
+         h: 242
+         s: 255
+         v: 255
+   -
+      color: RED
+      mins:
+         h: 105
+         s: 63
+         v: 195
+      maxs:
+         h: 179
+         s: 255
+         v: 255
+   -
+      color: YELLOW
+      mins:
+         h: 22
+         s: 0
+         v: 185
+      maxs:
+         h: 38
+         s: 255
+         v: 255
