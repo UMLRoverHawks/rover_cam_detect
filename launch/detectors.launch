@@ -1,18 +1,25 @@
 <launch>
 
+  <arg name="passthru" default="false" />
+
   <!-- front camera parameter file -->
   <include file="$(find rover_cam_detect)/launch/detector_node_front.launch" ns="camera0" >
    <remap from="image" to="image_raw"/>
+   <arg name="passthru" default="$(arg passthru)"/>
+
   </include>
   <!-- back camera parameter file -->
   <include file="$(find rover_cam_detect)/launch/detector_node_back.launch" ns="camera1" >
    <remap from="image" to="image_raw"/>
+   <arg name="passthru" default="$(arg passthru)"/>
   </include>
   <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera2" >
    <remap from="image" to="image_raw"/>
+   <arg name="passthru" default="$(arg passthru)"/>
   </include>
   <include file="$(find rover_cam_detect)/launch/detector_node.launch" ns="camera3" >
    <remap from="image" to="image_raw"/>
+   <arg name="passthru" default="$(arg passthru)"/>
   </include>
 
 </launch>

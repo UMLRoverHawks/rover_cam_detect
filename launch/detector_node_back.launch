@@ -1,4 +1,7 @@
 <launch>
+
+  <arg name="passthru" />
+
   <node name="rover_cam_detect" pkg="rover_cam_detect" type="rover_cam_detect" output="screen" >
    	<remap from="image" to="image_raw"/>
   	<param name="calibPath" value="/home/csrobot/.calibrations/" />
@@ -11,7 +14,7 @@
         <param name="maxX" value="640" />
         <param name="maxY" value="360" />
         <param name="showViz" value="0" />
-
+        <param name="passthru" value="$(arg passthru)" />
   </node>
 </launch>
 

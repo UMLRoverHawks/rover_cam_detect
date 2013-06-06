@@ -77,13 +77,14 @@ class RockDetection
   std::string PATH_TO_CALIBRATIONS;
   std::string CALIBRATION_FILE;
   bool SHOW_VIZ; // show debug visualizations
-  // 
+  bool PASSTHRU; // show debug visualizations
+  // number of color thresholds (may be more than 1 per color) 
   int numColorThreshs_;
 
 public:
   RockDetection()
     : it_(nh_), minSaturation_(60), MAX_ROCK_SIZE(100), MIN_ROCK_SIZE(20), MAX_COMPACT_NUM(3.0), 
-	NUM_CALIB_STD_DEVS(2.0), UL_X(0), UL_Y(0), LR_X(640), LR_Y(360), SHOW_VIZ(false)
+	NUM_CALIB_STD_DEVS(2.0), UL_X(0), UL_Y(0), LR_X(640), LR_Y(360), SHOW_VIZ(false), PASSTHRU(false)
   {
 
     // for visualization
@@ -138,7 +139,9 @@ public:
         nh_.hasParam("rover_cam_detect/showViz") && // default = 15 
         nh_.hasParam("rover_cam_detect/maxCompactNum") && // default = 3.0
         nh_.hasParam("rover_cam_detect/calibPath") && // default = /home/csrobot/.calibrations/
-        nh_.hasParam("rover_cam_detect/calibFile") ) // default = /default_calib.yml
+        nh_.hasParam("rover_cam_detect/calibFile") && // default = /default_calib.yml
+  	// check for image pass through
+        nh_.hasParam("rover_cam_detect/passthru") ) // default false 
     {
 
       nh_.getParam("rover_cam_detect/maxRockSize", MAX_ROCK_SIZE);
@@ -151,7 +154,9 @@ public:
       nh_.getParam("rover_cam_detect/maxX", LR_X); 
       nh_.getParam("rover_cam_detect/maxY", LR_Y);
       nh_.getParam("rover_cam_detect/showViz", SHOW_VIZ);
+      nh_.getParam("rover_cam_detect/passthru", PASSTHRU);
 
+      ROS_INFO("pass-through mode : %d\n", PASSTHRU);
       ROS_INFO("max rock size: %d\n", MAX_ROCK_SIZE);
       ROS_INFO("min rock size: %d\n", MIN_ROCK_SIZE);
       ROS_INFO("max compact number: %f\n", MAX_COMPACT_NUM);
@@ -315,6 +320,14 @@ public:
 
   void imageCb(const sensor_msgs::ImageConstPtr& msg)
   {
+    // pass images through when we don't want detectiosn
+    if(PASSTHRU == true) 
+    {
+	image_pub_.publish(msg);
+	return;
+    }
+
+    // ---- start opencv ----
     cv_bridge::CvImagePtr cv_ptr;
     try
     {
